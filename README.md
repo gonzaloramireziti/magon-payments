@@ -61,7 +61,10 @@ Ver `.env.example`. Las claves relevantes:
 | `GALIOPAY_AUTH_MODE` | `bearer` \| `header` \| `basic` \| `body` |
 | `GALIOPAY_WEBHOOK_SECRET` / `GALIOPAY_WEBHOOK_TOKEN` | Verificación del webhook |
 | `SUBSCRIPTION_DUE_DAY` | Día de vencimiento (10) |
-| `ADMIN_API_KEY`, `CRON_SECRET` | Protegen endpoints internos |
+| `ADMIN_API_KEY` | Protege la API interna (`x-admin-key`) |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Credenciales del panel `/admin` |
+| `ADMIN_SESSION_SECRET` | Firma la sesión del panel (opcional) |
+| `CRON_SECRET` | Protege el cron de facturas |
 
 Con `GALIOPAY_MODE=mock` no se llama a la API real: `/api/payments/create` devuelve un checkout simulado
 (`/mock-checkout`) y podés aprobar el pago con el botón "Simular transferencia aprobada".
@@ -130,13 +133,26 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `GET` | `/api/subscription/status?key=KEY` | Estado de la suscripción (usado por el componente) |
 | `POST` | `/api/payments/create` | Crea el pago. Body `{ "clientKey": "..." }` |
 | `POST` | `/api/webhooks/galiopay` | Webhook de GalioPay (idempotente) |
-| `GET/POST/PATCH` | `/api/admin/clients` | Alta/edición de clientes (header `x-admin-key`) |
+| `GET/POST/PATCH` | `/api/admin/clients` | Alta/edición de clientes (sesión del panel o `x-admin-key`) |
+| `POST` | `/api/admin/payments` | Confirma un pago manual (efectivo/transferencia externa) |
+| `POST` | `/api/admin/login` \| `/logout` | Sesión del panel `/admin` |
 | `GET/POST` | `/api/cron/invoices` | Genera facturas del período y marca vencidas (`x-cron-secret`) |
 | `GET` | `/api/receipts?key=KEY&invoiceId=...` | Comprobante de pago en PDF (factura paga) |
 | `GET` | `/api/protected` | Ejemplo de recurso protegido por suscripción |
 | `POST` | `/api/mock/pay` | Solo en modo mock: simula webhook aprobado |
 
-### Definir un cliente (Magon)
+## Panel de administración (`/admin`)
+
+UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confirmar pagos manuales**
+(para quien paga por fuera de GalioPay).
+
+1. Configurá en el servidor: `ADMIN_USERNAME`, `ADMIN_PASSWORD` (y opcional `ADMIN_SESSION_SECRET`).
+   Si no definís `ADMIN_PASSWORD`, se usa `ADMIN_API_KEY`.
+2. Entrá a `https://TU-DOMINIO/admin` e iniciá sesión. La sesión va en una cookie HttpOnly firmada (12 h).
+3. Podés: crear cliente (con `start_period`), editarlo, y confirmar pago seleccionando facturas
+   impagas + medio de pago + nota. Queda registrado como pago `provider = manual`.
+
+### Definir un cliente (API)
 
 ```bash
 curl -X POST http://localhost:3000/api/admin/clients \
@@ -228,6 +244,8 @@ Props principales:
 | `apiBaseUrl` | `string` | URL del backend; vacío = mismo origen |
 | `pollIntervalMs` | `number` | Frecuencia de re-chequeo (default 15000) |
 | `returnUrl` | `string` | A dónde vuelve GalioPay tras pagar. Por defecto, la página actual del cliente |
+| `showLoadingScreen` | `boolean` | Verifica de fondo; el gate solo aparece si está vencida (default `false`) |
+| `blockOnError` | `boolean` | Bloquear si falla la consulta (default `false`) |
 | `theme` | `MagonPayTheme` | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | Textos (i18n) |
 | `logoSrc` | `string` | URL del logo; por defecto `https://magon.tech/assets/logos/logo.png` |

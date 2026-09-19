@@ -36,6 +36,11 @@ export default function App() {
 Eso es todo. Si el cliente está al día ve `<TuApp />`; si debe o está vencido, aparece la pantalla de pago
 y el contenido queda bloqueado hasta que pague.
 
+> **Importante:** la verificación de la suscripción es **de fondo**. **Nunca** se muestra una pantalla de
+> "Consultando suscripción" en cada recarga: la app se renderiza normal y el gate **solo aparece si la
+> suscripción está efectivamente vencida**. La consulta corre en segundo plano y, mientras está bloqueado,
+> se reintenta cada `pollIntervalMs`. No agregues pantallas de carga propias para esta verificación.
+
 ## 3. Props
 
 | Prop | Tipo | Default | Descripción |
@@ -44,6 +49,8 @@ y el contenido queda bloqueado hasta que pague.
 | `apiBaseUrl` | `string` | `""` | URL del backend de Magon. Vacío = mismo origen. |
 | `pollIntervalMs` | `number` | `15000` | Cada cuánto re-chequea el estado mientras está bloqueado. |
 | `returnUrl` | `string` | página actual | A dónde vuelve GalioPay tras pagar. |
+| `showLoadingScreen` | `boolean` | `false` | Si `true`, muestra pantalla de carga mientras consulta. Por defecto **no** (verifica de fondo). |
+| `blockOnError` | `boolean` | `false` | Si `true`, bloquea cuando falla la consulta. Por defecto deja pasar (el backend igual protege). |
 | `theme` | `object` | tema oscuro | Colores, radio, tipografía. |
 | `labels` | `object` | español | Textos. |
 | `logoSrc` | `string` | `https://magon.tech/assets/logos/logo.png` | URL de tu logo (PNG/SVG). |

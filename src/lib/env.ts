@@ -42,6 +42,9 @@ export const subscription = {
 };
 
 export const adminApiKey = process.env.ADMIN_API_KEY ?? "";
+export const adminUsername = process.env.ADMIN_USERNAME ?? "admin";
+export const adminPassword = process.env.ADMIN_PASSWORD ?? "";
+export const adminSessionSecret = process.env.ADMIN_SESSION_SECRET ?? "";
 export const cronSecret = process.env.CRON_SECRET ?? "";
 export const corsOrigins = process.env.CORS_ORIGINS ?? "*";
 

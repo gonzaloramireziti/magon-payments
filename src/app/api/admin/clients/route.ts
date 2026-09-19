@@ -1,19 +1,14 @@
 import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { adminApiKey } from "@/lib/env";
+import { isAdminRequest } from "@/lib/admin/auth";
 import { getSubscriptionStatus } from "@/lib/subscription/service";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
 function isAuthorized(request: NextRequest): boolean {
-  if (!adminApiKey) return false;
-  const provided =
-    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
-    request.headers.get("x-admin-key") ??
-    null;
-  return provided === adminApiKey;
+  return isAdminRequest(request);
 }
 
 function generateClientKey(): string {

@@ -73,7 +73,10 @@ git push -u origin main
 | `GALIOPAY_CURRENCY` | `ARS` | no |
 | `SUBSCRIPTION_DUE_DAY` | `10` | no |
 | `SUBSCRIPTION_TIMEZONE` | `America/Argentina/Buenos_Aires` | no |
-| `ADMIN_API_KEY` | clave larga aleatoria | **sí** |
+| `ADMIN_API_KEY` | clave larga aleatoria (acceso a la API de admin) | **sí** |
+| `ADMIN_USERNAME` | usuario del panel `/admin` (default `admin`) | no |
+| `ADMIN_PASSWORD` | contraseña del panel `/admin` | **sí** |
+| `ADMIN_SESSION_SECRET` | secreto para firmar la sesión del panel (opcional) | **sí** |
 | `CRON_SECRET` | clave larga aleatoria | **sí** |
 
 Importante: las `NEXT_PUBLIC_*` se **congelan en el build**. Si las cambiás, hacé *Redeploy*.
@@ -163,4 +166,5 @@ import { MagonPayGate } from "magon-pay-react";
 - [ ] Webhook de GalioPay apuntando a `/api/webhooks/galiopay`
 - [ ] `GALIOPAY_MODE=live` y `GALIOPAY_SANDBOX=false` en producción
 - [ ] `/api/cron/invoices` responde OK con el `CRON_SECRET`
+- [ ] `/admin` accesible con `ADMIN_USERNAME` / `ADMIN_PASSWORD`
 - [ ] Cliente de prueba bloqueado antes del pago y desbloqueado después del webhook `approved`

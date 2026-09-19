@@ -35,6 +35,8 @@ export type MagonPayGateProps = {
   logoAlt?: string;
   children: ReactNode;
   enforce?: boolean;
+  showLoadingScreen?: boolean;
+  blockOnError?: boolean;
   renderBlocked?: (context: MagonPayGateRenderContext) => ReactNode;
   renderLoading?: () => ReactNode;
   onStatusChange?: (status: MagonSubscriptionStatus) => void;
@@ -53,6 +55,8 @@ export function MagonPayGate(props: MagonPayGateProps) {
     logoAlt,
     children,
     enforce = true,
+    showLoadingScreen = false,
+    blockOnError = false,
     renderBlocked,
     renderLoading,
     onStatusChange,
@@ -77,7 +81,7 @@ export function MagonPayGate(props: MagonPayGateProps) {
     return <>{children}</>;
   }
 
-  if (loading && !status) {
+  if (showLoadingScreen && loading && !status) {
     if (renderLoading) return <>{renderLoading()}</>;
     return (
       <div
@@ -100,7 +104,7 @@ export function MagonPayGate(props: MagonPayGateProps) {
     );
   }
 
-  if (!status) {
+  if (blockOnError && !status && error) {
     return (
       <div
         style={{
@@ -118,12 +122,12 @@ export function MagonPayGate(props: MagonPayGateProps) {
         }}
       >
         {logoNode}
-        {error ? `${l.error}: ${error}` : l.error}
+        {`${l.error}: ${error}`}
       </div>
     );
   }
 
-  if (status.blocked) {
+  if (status?.blocked) {
     if (renderBlocked) {
       return (
         <>

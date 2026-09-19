@@ -36,6 +36,8 @@ Si el backend corre en el mismo dominio, omití `apiBaseUrl`.
 | `apiBaseUrl` | `string` | `""` | URL del backend Magon (vacío = mismo origen) |
 | `pollIntervalMs` | `number` | `15000` | Re-chequeo del estado mientras está bloqueado |
 | `returnUrl` | `string` | página actual | A dónde vuelve GalioPay después de pagar |
+| `showLoadingScreen` | `boolean` | `false` | Verifica de fondo; el gate solo aparece si está vencida |
+| `blockOnError` | `boolean` | `false` | Bloquear si falla la consulta (por defecto deja pasar) |
 | `theme` | `MagonPayTheme` | — | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | — | Textos |
 | `logoSrc` | `string` | `https://magon.tech/assets/logos/logo.png` | URL del logo (PNG/SVG) |

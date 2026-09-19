@@ -75,6 +75,38 @@ export function periodOf(date: Date, timezone: string): string {
   return `${year}-${pad(month)}`;
 }
 
+function tzOffsetMs(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const asUTC = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second")
+  );
+  return asUTC - date.getTime();
+}
+
+export function startOfLocalMonthISO(now: Date, timezone: string): string {
+  const { year, month } = localDateParts(now, timezone);
+  const utcMidnight = Date.UTC(year, month - 1, 1);
+  const offset = tzOffsetMs(new Date(utcMidnight), timezone);
+  return new Date(utcMidnight - offset).toISOString();
+}
+
 export function dueDateForPeriod(period: string, dueDay = 10): string {
   return `${addMonths(period, 1)}-${pad(dueDay)}`;
 }

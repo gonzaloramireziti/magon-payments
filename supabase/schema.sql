@@ -9,6 +9,7 @@ create table if not exists public.clients (
   client_key text not null unique,
   name text not null,
   email text,
+  phone text,
   monthly_amount numeric(12,2) not null default 0 check (monthly_amount >= 0),
   currency text not null default 'ARS',
   active boolean not null default true,
@@ -67,6 +68,18 @@ create table if not exists public.webhook_events (
   unique (provider, event_id)
 );
 
+-- Costos fijos mensuales (en ARS o USD).
+create table if not exists public.costs (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  amount numeric(12,2) not null default 0 check (amount >= 0),
+  currency text not null default 'ARS',
+  active boolean not null default true,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_clients_client_key on public.clients (client_key);
 create index if not exists idx_invoices_client_period on public.invoices (client_id, period);
 create index if not exists idx_invoices_status_due on public.invoices (status, due_date);
@@ -97,12 +110,17 @@ drop trigger if exists trg_payments_updated_at on public.payments;
 create trigger trg_payments_updated_at before update on public.payments
   for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_costs_updated_at on public.costs;
+create trigger trg_costs_updated_at before update on public.costs
+  for each row execute function public.set_updated_at();
+
 -- RLS: el backend usa la service role key (bypassa RLS).
 -- Sin políticas => ningún acceso con anon/authenticated.
 alter table public.clients enable row level security;
 alter table public.invoices enable row level security;
 alter table public.payments enable row level security;
 alter table public.webhook_events enable row level security;
+alter table public.costs enable row level security;
 
 -- Cliente de ejemplo (cambiar la KEY y el monto).
 insert into public.clients (client_key, name, email, monthly_amount, currency)

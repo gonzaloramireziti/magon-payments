@@ -48,6 +48,10 @@ export const adminSessionSecret = process.env.ADMIN_SESSION_SECRET ?? "";
 export const cronSecret = process.env.CRON_SECRET ?? "";
 export const corsOrigins = process.env.CORS_ORIGINS ?? "*";
 
+export const usdRateApi =
+  process.env.USD_RATE_API ?? "https://dolarapi.com/v1/dolares/oficial";
+export const usdRateFallback = Number(process.env.USD_RATE_FALLBACK ?? 0);
+
 export function supabaseConfig(): { url: string; serviceRoleKey: string } {
   return {
     url: required("SUPABASE_URL", process.env.SUPABASE_URL),

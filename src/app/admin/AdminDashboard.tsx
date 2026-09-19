@@ -9,6 +9,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { AdminStats } from "./AdminStats";
+import { AdminCosts } from "./AdminCosts";
 
 type Invoice = {
   id: string;
@@ -36,6 +38,7 @@ type AdminClient = {
   client_key: string;
   name: string;
   email: string | null;
+  phone: string | null;
   monthly_amount: number | string;
   currency: string;
   active: boolean;
@@ -121,6 +124,19 @@ function stateBadge(state: string): { label: string; color: string } {
   }
 }
 
+function whatsappUrl(client: AdminClient): string {
+  const amount = client.status?.amountDue ?? 0;
+  const period = client.status?.periodLabel ?? "";
+  const monto = money(amount, client.currency);
+  const text =
+    `¡Hola ${client.name}! 👋 Somos el equipo de Magon. ` +
+    `Te escribimos para recordarte que tu suscripción de ${period} está lista para abonar: ${monto}. ` +
+    `Tenés tiempo hasta el 10 para hacerlo, sin apuro. ` +
+    `¡Cualquier duda quedamos a disposición! Gracias por confiar en nosotros 🙌`;
+  const digits = (client.phone ?? "").replace(/\D/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
 export function AdminDashboard() {
   const [clients, setClients] = useState<AdminClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +145,7 @@ export function AdminDashboard() {
   const [showNew, setShowNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [dashboardKey, setDashboardKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -152,6 +169,28 @@ export function AdminDashboard() {
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.reload();
+  }
+
+  async function remove(client: AdminClient) {
+    const confirmed = window.confirm(
+      `¿Borrar a "${client.name}"? Se eliminan también sus facturas y pagos asociados.`
+    );
+    if (!confirmed) return;
+    try {
+      const response = await fetch(
+        `/api/admin/clients?id=${encodeURIComponent(client.id)}`,
+        { method: "DELETE" }
+      );
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error ?? "Error");
+      setMessage(`Cliente "${client.name}" eliminado`);
+      setEditingId(null);
+      setPayingId(null);
+      setDashboardKey((key) => key + 1);
+      void load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
   }
 
   const totalDebt = clients.reduce((acc, client) => acc + (client.status?.amountDue ?? 0), 0);
@@ -206,11 +245,15 @@ export function AdminDashboard() {
             onCreated={(text) => {
               setMessage(text);
               setShowNew(false);
+              setDashboardKey((key) => key + 1);
               void load();
             }}
             onError={setError}
           />
         )}
+
+        <AdminStats reloadKey={dashboardKey} />
+        <AdminCosts onChanged={() => setDashboardKey((key) => key + 1)} />
 
         <div
           style={{
@@ -288,6 +331,32 @@ export function AdminDashboard() {
                           }}
                         >
                           Confirmar pago
+                        </button>{" "}
+                        <a
+                          href={whatsappUrl(client)}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            ...ghost,
+                            marginLeft: 6,
+                            display: "inline-block",
+                            textDecoration: "none",
+                            color: COLORS.ok,
+                            borderColor: `${COLORS.ok}66`,
+                          }}
+                        >
+                          WhatsApp
+                        </a>{" "}
+                        <button
+                          style={{
+                            ...ghost,
+                            marginLeft: 6,
+                            color: COLORS.danger,
+                            borderColor: `${COLORS.danger}66`,
+                          }}
+                          onClick={() => remove(client)}
+                        >
+                          Borrar
                         </button>
                       </td>
                     </tr>
@@ -300,6 +369,7 @@ export function AdminDashboard() {
                             onSaved={(text) => {
                               setMessage(text);
                               setEditingId(null);
+                              setDashboardKey((key) => key + 1);
                               void load();
                             }}
                             onError={setError}
@@ -316,6 +386,7 @@ export function AdminDashboard() {
                             onPaid={(text) => {
                               setMessage(text);
                               setPayingId(null);
+                              setDashboardKey((key) => key + 1);
                               void load();
                             }}
                             onError={setError}
@@ -355,6 +426,7 @@ function NewClientForm({
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     monthlyAmount: "15000",
     currency: "ARS",
     startPeriod: "",
@@ -372,6 +444,7 @@ function NewClientForm({
         body: JSON.stringify({
           name: form.name,
           email: form.email || null,
+          phone: form.phone || null,
           monthlyAmount: Number(form.monthlyAmount),
           currency: form.currency,
           startPeriod: form.startPeriod || null,
@@ -409,6 +482,9 @@ function NewClientForm({
       <Field label="Email">
         <input style={input} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
       </Field>
+      <Field label="WhatsApp">
+        <input style={input} placeholder="5491122334455" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+      </Field>
       <Field label="Monto mensual">
         <input style={input} type="number" value={form.monthlyAmount} onChange={(e) => setForm({ ...form, monthlyAmount: e.target.value })} />
       </Field>
@@ -440,6 +516,7 @@ function EditClientForm({
   const [form, setForm] = useState({
     name: client.name,
     email: client.email ?? "",
+    phone: client.phone ?? "",
     monthlyAmount: String(client.monthly_amount),
     currency: client.currency,
     startPeriod: client.start_period ?? "",
@@ -458,6 +535,7 @@ function EditClientForm({
           id: client.id,
           name: form.name,
           email: form.email || null,
+          phone: form.phone || null,
           monthlyAmount: Number(form.monthlyAmount),
           currency: form.currency,
           startPeriod: form.startPeriod || null,
@@ -489,6 +567,9 @@ function EditClientForm({
       </Field>
       <Field label="Email">
         <input style={input} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+      </Field>
+      <Field label="WhatsApp">
+        <input style={input} placeholder="5491122334455" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
       </Field>
       <Field label="Monto mensual">
         <input style={input} type="number" value={form.monthlyAmount} onChange={(e) => setForm({ ...form, monthlyAmount: e.target.value })} />

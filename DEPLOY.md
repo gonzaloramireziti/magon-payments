@@ -24,6 +24,8 @@ Vercel corre el backend y el dominio `pay.magon.com` apunta ahí. Supabase sólo
 2. SQL Editor → pegar y ejecutar `supabase/schema.sql`.
    - Si la base ya existía antes del cambio de ciclo de facturación, ejecutá también
      `supabase/migrations/001_billing_cycle.sql`.
+   - Para el dashboard de administración (costos y teléfono), ejecutá
+     `supabase/migrations/002_admin_dashboard.sql`.
 3. Anotar de **Project Settings → API**:
    - `Project URL` → `SUPABASE_URL`
    - `service_role` (secret) → `SUPABASE_SERVICE_ROLE_KEY`
@@ -78,6 +80,8 @@ git push -u origin main
 | `ADMIN_PASSWORD` | contraseña del panel `/admin` | **sí** |
 | `ADMIN_SESSION_SECRET` | secreto para firmar la sesión del panel (opcional) | **sí** |
 | `CRON_SECRET` | clave larga aleatoria | **sí** |
+| `USD_RATE_API` | endpoint de cotización dólar oficial (default `dolarapi.com/v1/dolares/oficial`) | no |
+| `USD_RATE_FALLBACK` | ARS por USD si la API falla | no |
 
 Importante: las `NEXT_PUBLIC_*` se **congelan en el build**. Si las cambiás, hacé *Redeploy*.
 
@@ -167,4 +171,5 @@ import { MagonPayGate } from "magon-pay-react";
 - [ ] `GALIOPAY_MODE=live` y `GALIOPAY_SANDBOX=false` en producción
 - [ ] `/api/cron/invoices` responde OK con el `CRON_SECRET`
 - [ ] `/admin` accesible con `ADMIN_USERNAME` / `ADMIN_PASSWORD`
+- [ ] Dashboard con ganancias, costos y cotización del dólar funcionando
 - [ ] Cliente de prueba bloqueado antes del pago y desbloqueado después del webhook `approved`

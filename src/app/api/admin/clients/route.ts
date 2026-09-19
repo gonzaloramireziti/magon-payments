@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       client_key: clientKey,
       name,
       email: typeof body.email === "string" ? body.email : null,
+      phone: typeof body.phone === "string" ? body.phone : null,
       monthly_amount: monthlyAmount,
       currency: typeof body.currency === "string" ? body.currency : "ARS",
       active: body.active === undefined ? true : Boolean(body.active),
@@ -103,6 +104,7 @@ export async function PATCH(request: NextRequest) {
   const update: Record<string, unknown> = {};
   if (typeof body.name === "string") update.name = body.name.trim();
   if (typeof body.email === "string" || body.email === null) update.email = body.email;
+  if (typeof body.phone === "string" || body.phone === null) update.phone = body.phone;
   if (body.monthlyAmount !== undefined) update.monthly_amount = Number(body.monthlyAmount);
   if (typeof body.currency === "string") update.currency = body.currency;
   if (body.active !== undefined) update.active = Boolean(body.active);
@@ -133,4 +135,27 @@ export async function PATCH(request: NextRequest) {
   }
 
   return okJson({ client: data });
+}
+
+export async function DELETE(request: NextRequest) {
+  if (!isAuthorized(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+
+  const id =
+    (typeof body.id === "string" ? body.id : null) ??
+    new URL(request.url).searchParams.get("id");
+
+  if (!id) return errorJson("Falta el id del cliente", 400, "MISSING_ID");
+
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from("clients").delete().eq("id", id);
+  if (error) return errorJson(error.message, 500, "DB_ERROR");
+
+  return okJson({ deleted: id });
 }

@@ -65,6 +65,8 @@ Ver `.env.example`. Las claves relevantes:
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Credenciales del panel `/admin` |
 | `ADMIN_SESSION_SECRET` | Firma la sesión del panel (opcional) |
 | `CRON_SECRET` | Protege el cron de facturas |
+| `USD_RATE_API` | Cotización dólar oficial (default `dolarapi.com/v1/dolares/oficial`) |
+| `USD_RATE_FALLBACK` | ARS por USD si la API falla |
 
 Con `GALIOPAY_MODE=mock` no se llama a la API real: `/api/payments/create` devuelve un checkout simulado
 (`/mock-checkout`) y podés aprobar el pago con el botón "Simular transferencia aprobada".
@@ -133,8 +135,10 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `GET` | `/api/subscription/status?key=KEY` | Estado de la suscripción (usado por el componente) |
 | `POST` | `/api/payments/create` | Crea el pago. Body `{ "clientKey": "..." }` |
 | `POST` | `/api/webhooks/galiopay` | Webhook de GalioPay (idempotente) |
-| `GET/POST/PATCH` | `/api/admin/clients` | Alta/edición de clientes (sesión del panel o `x-admin-key`) |
+| `GET/POST/PATCH/DELETE` | `/api/admin/clients` | Alta/edición/borrado de clientes (sesión del panel o `x-admin-key`) |
 | `POST` | `/api/admin/payments` | Confirma un pago manual (efectivo/transferencia externa) |
+| `GET/POST/PATCH/DELETE` | `/api/admin/costs` | Costos fijos mensuales (ARS/USD) |
+| `GET` | `/api/admin/dashboard?period=month\|all` | Ganancias, costos, deuda y cotización |
 | `POST` | `/api/admin/login` \| `/logout` | Sesión del panel `/admin` |
 | `GET/POST` | `/api/cron/invoices` | Genera facturas del período y marca vencidas (`x-cron-secret`) |
 | `GET` | `/api/receipts?key=KEY&invoiceId=...` | Comprobante de pago en PDF (factura paga) |
@@ -149,8 +153,14 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
 1. Configurá en el servidor: `ADMIN_USERNAME`, `ADMIN_PASSWORD` (y opcional `ADMIN_SESSION_SECRET`).
    Si no definís `ADMIN_PASSWORD`, se usa `ADMIN_API_KEY`.
 2. Entrá a `https://TU-DOMINIO/admin` e iniciá sesión. La sesión va en una cookie HttpOnly firmada (12 h).
-3. Podés: crear cliente (con `start_period`), editarlo, y confirmar pago seleccionando facturas
-   impagas + medio de pago + nota. Queda registrado como pago `provider = manual`.
+3. Podés: crear cliente (con `start_period`), editarlo, **borrarlo** (con confirmación; elimina en cascada
+   sus facturas y pagos) y confirmar pago seleccionando facturas impagas + medio de pago + nota.
+   Queda registrado como pago `provider = manual`.
+4. **Resumen (dashboard):** ganancias en ARS, en USD y totales convertidas con la **cotización del dólar
+   oficial en tiempo real** (con toggle USD ⇄ ARS), costos fijos mensuales, ganancia final y deuda actual.
+   Filtro por mes actual o histórico.
+5. **Costos fijos:** sección para cargar/editar/borrar costos en ARS o USD; se suman al total convertido.
+6. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
 
 ### Definir un cliente (API)
 

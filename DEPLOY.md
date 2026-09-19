@@ -58,6 +58,7 @@ git push -u origin main
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJ...` | **sí** |
 | `NEXT_PUBLIC_APP_URL` | `https://pay.magon.com` | no (build) |
 | `NEXT_PUBLIC_API_BASE_URL` | `https://pay.magon.com` | no (build) |
+| `CORS_ORIGINS` | `*` (o lista separada por coma, p.ej. `https://app.cliente.com,http://localhost:5173`) | no |
 | `GALIOPAY_MODE` | `live` (o `mock` para probar) | no |
 | `GALIOPAY_API_BASE_URL` | `https://pay.galio.app/api` | no |
 | `GALIOPAY_CREATE_PAYMENT_PATH` | `/payment-links` | no |

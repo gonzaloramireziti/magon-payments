@@ -46,6 +46,7 @@ Ver `.env.example`. Las claves relevantes:
 | --- | --- |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Credenciales de Supabase (servidor) |
 | `NEXT_PUBLIC_API_BASE_URL` | URL pública del backend que consume el componente |
+| `CORS_ORIGINS` | Orígenes permitidos (`*` o lista separada por coma) para la API |
 | `GALIOPAY_MODE` | `mock` (dev) o `live` |
 | `GALIOPAY_API_BASE_URL` | URL base de la API de GalioPay |
 | `GALIOPAY_CREATE_PAYMENT_PATH` | Endpoint de creación de pagos |

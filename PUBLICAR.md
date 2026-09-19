@@ -47,6 +47,9 @@ gh release create v1.0.0 magon-pay-react-1.0.0.tgz \
 Sin `gh`: en GitHub → **Releases → Draft a new release** → tag `v1.0.0` → arrastrar
 `magon-pay-react-1.0.0.tgz` → **Publish release**.
 
+Si no tenés `gh` instalado (Windows): `winget install --id GitHub.cli`, reabrí la terminal y
+ejecutá `gh auth login`.
+
 El cliente instala con la URL del asset:
 
 ```bash
@@ -120,6 +123,37 @@ node -e "console.log(require.resolve('magon-pay-react'))"
 ```
 
 Con TypeScript, los tipos salen de `dist/index.d.ts` (incluidos en el paquete).
+
+---
+
+## Errores comunes
+
+**`npm error code E404` al instalar por URL de GitHub**
+
+1. El repo de GitHub es **privado**. Los assets de un Release privado no se descargan sin
+   autenticación, por eso la URL da 404. Solución: publicá el paquete en un **repo público**
+   (Opción B) o en el **registro npm** (Opción C); así el backend puede quedar privado.
+2. **No existe el Release o el tag**. Verificá que el release esté *Published* (no *Draft*) y que el
+   tag sea exactamente el de la URL (`v1.0.0`).
+3. **Nombre del asset distinto**. Tiene que coincidir con `magon-pay-react-X.Y.Z.tgz`.
+4. **Versión no coincide**: si el `package.json` dice `1.0.0`, el archivo es `magon-pay-react-1.0.0.tgz`.
+
+Comprobación rápida (repo público):
+
+```bash
+# debe devolver JSON con la lista de releases
+curl https://api.github.com/repos/TU-USUARIO/TU-REPO/releases
+```
+
+**`gh: The term 'gh' is not recognized`**
+
+Instalá el GitHub CLI: `winget install --id GitHub.cli`, reabrí la terminal y `gh auth login`.
+O usá la interfaz web (Releases → Draft a new release).
+
+**`npm i github:...` tarda o falla al compilar**
+
+Es normal: npm ejecuta `prepare` y compila con `tsup`. Para evitarlo, usá el **tarball de un Release**
+(Opción A) que ya viene compilado.
 
 ---
 

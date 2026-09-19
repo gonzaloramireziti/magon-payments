@@ -40,15 +40,28 @@ export function verifyWebhookSignature(
   }
 
   if (galiopay.webhookSecret) {
-    const signature =
+    const signatureHeader =
       headers.get("x-galiopay-signature") ??
       headers.get("x-signature") ??
       headers.get("x-hub-signature-256") ??
       "";
-    const cleaned = signature.replace(/^sha256=/i, "").trim();
-    const expected = createHmac("sha256", galiopay.webhookSecret).update(rawBody).digest("hex");
-    if (cleaned && safeEqual(cleaned.toLowerCase(), expected.toLowerCase())) return { ok: true };
-    return { ok: false, reason: "firma HMAC inválida" };
+    const timestamp = headers.get("x-galiopay-timestamp");
+    const cleaned = signatureHeader
+      .replace(/^v1=/i, "")
+      .replace(/^sha256=/i, "")
+      .trim();
+    const signedPayload = timestamp ? `${timestamp}.${rawBody}` : rawBody;
+    const expected = createHmac("sha256", galiopay.webhookSecret).update(signedPayload).digest("hex");
+    if (!cleaned || !safeEqual(cleaned.toLowerCase(), expected.toLowerCase())) {
+      return { ok: false, reason: "firma HMAC inválida" };
+    }
+    if (timestamp) {
+      const ageSeconds = Math.abs(Date.now() / 1000 - Number(timestamp));
+      if (Number.isFinite(ageSeconds) && ageSeconds > galiopay.webhookToleranceSeconds) {
+        return { ok: false, reason: "timestamp del webhook fuera de rango" };
+      }
+    }
+    return { ok: true };
   }
 
   if (!galiopay.isLive) return { ok: true, reason: "sin verificación (modo mock)" };
@@ -75,18 +88,18 @@ export function normalizeTransferPayload(payload: Record<string, unknown>): Norm
     (payload.externalReference as string) ??
     null;
   const date = (payload.date as string) ?? null;
+  const status = String(payload.status ?? "pending").toLowerCase();
   const eventId =
-    (payload.id as string) ??
     (payload.eventId as string) ??
-    (referenceId ? `${referenceId}:${date ?? ""}` : `${Date.now()}`);
+    (providerPaymentId ? `${providerPaymentId}:${status}:${date ?? ""}` : `evt_${Date.now()}`);
 
   return {
     eventId,
     providerPaymentId,
     referenceId,
-    status: String(payload.status ?? "pending").toLowerCase(),
+    status,
     paymentMethodId: (payload.paymentMethodId as string) ?? null,
-    amount: num(payload.amount),
+    amount: num(payload.amount ?? payload.amount_refunded),
     netAmount: payload.netAmount === undefined ? null : num(payload.netAmount),
     currency: String(payload.currency ?? galiopay.currency),
     date,
@@ -146,7 +159,10 @@ export type WebhookResult = {
   reason?: string;
 };
 
-export async function processGalioPayWebhook(rawBody: string): Promise<WebhookResult> {
+export async function processGalioPayWebhook(
+  rawBody: string,
+  options: { eventId?: string } = {}
+): Promise<WebhookResult> {
   let payload: Record<string, unknown>;
   try {
     payload = JSON.parse(rawBody) as Record<string, unknown>;
@@ -161,7 +177,7 @@ export async function processGalioPayWebhook(rawBody: string): Promise<WebhookRe
     .from("webhook_events")
     .insert({
       provider: "galiopay",
-      event_id: normalized.eventId,
+      event_id: options.eventId ?? normalized.eventId,
       event_type: normalized.status,
       payload,
     })

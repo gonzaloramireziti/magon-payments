@@ -59,12 +59,13 @@ git push -u origin main
 | `NEXT_PUBLIC_APP_URL` | `https://pay.magon.com` | no (build) |
 | `NEXT_PUBLIC_API_BASE_URL` | `https://pay.magon.com` | no (build) |
 | `GALIOPAY_MODE` | `live` (o `mock` para probar) | no |
-| `GALIOPAY_API_BASE_URL` | URL base de GalioPay | no |
-| `GALIOPAY_CREATE_PAYMENT_PATH` | p.ej. `/v1/payments` | no |
+| `GALIOPAY_API_BASE_URL` | `https://pay.galio.app/api` | no |
+| `GALIOPAY_CREATE_PAYMENT_PATH` | `/payment-links` | no |
 | `GALIOPAY_CLIENT_ID` | `1772123694780-2d0317b887d70818` | no |
 | `GALIOPAY_API_KEY` | `d9c9...` | **sí** |
-| `GALIOPAY_AUTH_MODE` | `bearer` / `header` / `basic` / `body` | no |
-| `GALIOPAY_WEBHOOK_SECRET` | clave HMAC del webhook | **sí** |
+| `GALIOPAY_AUTH_MODE` | `bearer` (GalioPay: Bearer + `x-client-id`) | no |
+| `GALIOPAY_SANDBOX` | `true` para probar, `false` en producción | no |
+| `GALIOPAY_WEBHOOK_SECRET` | secreto HMAC de webhook de GalioPay | **sí** |
 | `GALIOPAY_WEBHOOK_TOKEN` | token compartido (alternativa) | **sí** |
 | `GALIOPAY_CURRENCY` | `ARS` | no |
 | `SUBSCRIPTION_DUE_DAY` | `10` | no |
@@ -94,10 +95,11 @@ Configurar la URL de notificación:
 https://pay.magon.com/api/webhooks/galiopay
 ```
 
-- Si GalioPay firma con HMAC-SHA256: cargá `GALIOPAY_WEBHOOK_SECRET`. El backend acepta la firma en
-  `x-galiopay-signature`, `x-signature` o `x-hub-signature-256` (hex, con o sin `sha256=`).
-- Si usa un token compartido: cargá `GALIOPAY_WEBHOOK_TOKEN`; se acepta en
-  `x-galiopay-token`, `x-webhook-token`, `Authorization: Bearer <token>` o `?token=`.
+- GalioPay firma con HMAC-SHA256 opcional: activala en tu cuenta y cargá el secreto en
+  `GALIOPAY_WEBHOOK_SECRET`. El backend valida `X-GalioPay-Signature: v1=...` calculando
+  `HMAC_SHA256(timestamp + "." + rawBody)` con `X-GalioPay-Timestamp` (tolerancia 300 s).
+- Alternativa: `GALIOPAY_WEBHOOK_TOKEN` (se acepta en `x-galiopay-token`, `Authorization: Bearer`, o `?token=`).
+- Idempotencia: se usa `X-GalioPay-Event-Id` (fallback: id + status + fecha del pago).
 - En modo `live`, si no configurás ninguno, el webhook se **rechaza** (401) por seguridad.
 
 ## 7. Verificar el deploy
@@ -153,6 +155,6 @@ import { MagonPayGate } from "magon-pay-react";
 - [ ] `pay.magon.com` con CNAME a Vercel y HTTPS activo
 - [ ] `NEXT_PUBLIC_APP_URL` y `NEXT_PUBLIC_API_BASE_URL` = `https://pay.magon.com` + Redeploy
 - [ ] Webhook de GalioPay apuntando a `/api/webhooks/galiopay`
-- [ ] `GALIOPAY_MODE=live` y adapter de `client.ts` ajustado a la API real
+- [ ] `GALIOPAY_MODE=live` y `GALIOPAY_SANDBOX=false` en producción
 - [ ] `/api/cron/invoices` responde OK con el `CRON_SECRET`
 - [ ] Cliente de prueba bloqueado antes del pago y desbloqueado después del webhook `approved`

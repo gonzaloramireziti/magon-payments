@@ -29,7 +29,9 @@ export const galiopay = {
   apiKeyHeader: process.env.GALIOPAY_API_KEY_HEADER ?? "x-api-key",
   webhookSecret: process.env.GALIOPAY_WEBHOOK_SECRET ?? "",
   webhookToken: process.env.GALIOPAY_WEBHOOK_TOKEN ?? "",
+  webhookToleranceSeconds: Number(process.env.GALIOPAY_WEBHOOK_TOLERANCE ?? 300),
   currency: process.env.GALIOPAY_CURRENCY ?? "ARS",
+  sandbox: bool(process.env.GALIOPAY_SANDBOX, false),
   timeoutMs: Number(process.env.GALIOPAY_TIMEOUT_MS ?? 15000),
   isLive: (process.env.GALIOPAY_MODE ?? "mock") === "live",
 };

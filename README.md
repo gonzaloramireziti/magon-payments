@@ -58,15 +58,40 @@ Ver `.env.example`. Las claves relevantes:
 Con `GALIOPAY_MODE=mock` no se llama a la API real: `/api/payments/create` devuelve un checkout simulado
 (`/mock-checkout`) y podés aprobar el pago con el botón "Simular transferencia aprobada".
 
-### 3. Configurar GalioPay
+### 3. GalioPay
 
-Cuando tengas la doc de GalioPay, ajustá en `src/lib/galiopay/client.ts`:
+Integración ya implementada contra la API real ([docs](https://pay.galio.app/docs/api/introduccion)):
 
-- `buildRequestBody()` → campos que espera la API.
-- `buildAuthHeaders()` → esquema de autenticación (`GALIOPAY_AUTH_MODE`).
-- `normalizeResponse()` → nombres de los campos de respuesta (URL de checkout, QR, id).
+- Base: `https://pay.galio.app/api`, endpoint `POST /payment-links` (`GALIOPAY_CREATE_PAYMENT_PATH=/payment-links`).
+- Auth: `Authorization: Bearer {API_KEY}` + `x-client-id: {CLIENT_ID}` (`GALIOPAY_AUTH_MODE=bearer`).
+- Se crea un **payment link** con `items`, `referenceId`, `notificationUrl` y `backUrl`; la respuesta `url` es la pasarela.
+- `GALIOPAY_SANDBOX=true` crea links de prueba (solo aplica con `GALIOPAY_MODE=live`).
 
-El webhook ya entiende el formato informado:
+El webhook entiende el payload de GalioPay (`approved` y `refunded`) y valida la firma opcional
+`X-GalioPay-Signature: v1=HMAC_SHA256(timestamp + "." + rawBody)` con `GALIOPAY_WEBHOOK_SECRET`,
+usando `X-GalioPay-Event-Id` para idempotencia:
+
+```json
+{
+  "id": "699f004c01b956cd4250aa77",
+  "paymentMethodId": "TRANSFER",
+  "amount": 1000,
+  "netAmount": 970,
+  "moneyReleaseDate": "2026-02-25T14:10:00.000Z",
+  "status": "approved",
+  "currency": "ARS",
+  "date": "2026-02-25T13:59:40.406Z",
+  "referenceId": "test-ref-1234567890"
+}
+```
+
+En GalioPay configurá la URL del webhook (o se envía como `notificationUrl` al crear el link):
+
+```
+https://TU-DOMINIO/api/webhooks/galiopay
+```
+
+> Monto mínimo de GalioPay: `$100`. Si un cliente tiene `monthlyAmount` menor, la creación del link falla.
 
 ```json
 {

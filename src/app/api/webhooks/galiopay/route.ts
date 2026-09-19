@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await processGalioPayWebhook(rawBody);
+    const eventId = request.headers.get("x-galiopay-event-id") ?? undefined;
+    const result = await processGalioPayWebhook(rawBody, { eventId });
     return okJson({ result });
   } catch (error) {
     console.error("[api/webhooks/galiopay]", error);

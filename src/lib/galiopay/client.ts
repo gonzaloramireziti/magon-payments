@@ -39,13 +39,13 @@ function asString(value: unknown): string | null {
 function buildAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   const { apiKey, clientId, authMode, apiKeyHeader } = galiopay;
+  if (clientId) headers["x-client-id"] = clientId;
   switch (authMode) {
     case "bearer":
       headers.authorization = `Bearer ${apiKey}`;
       break;
     case "header":
       headers[apiKeyHeader] = apiKey;
-      if (clientId) headers["x-client-id"] = clientId;
       break;
     case "basic":
       headers.authorization = `Basic ${Buffer.from(`${clientId}:${apiKey}`).toString("base64")}`;
@@ -58,22 +58,25 @@ function buildAuthHeaders(): Record<string, string> {
 
 function buildRequestBody(input: CreatePaymentInput): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    clientId: galiopay.clientId,
-    amount: input.amount,
-    currency: input.currency,
-    description: input.description,
+    items: [
+      {
+        title: input.description,
+        quantity: 1,
+        unitPrice: input.amount,
+        currencyId: input.currency,
+      },
+    ],
     referenceId: input.referenceId,
-    externalReference: input.referenceId,
-    paymentMethod: "TRANSFER",
-    callbackUrl: input.callbackUrl,
-    webhookUrl: input.webhookUrl,
     notificationUrl: input.webhookUrl,
-    metadata: { magonPaymentId: input.paymentId },
+    backUrl: {
+      success: input.callbackUrl,
+      failure: input.callbackUrl,
+    },
+    sandbox: galiopay.sandbox,
   };
-  if (input.payer?.name) body.payerName = input.payer.name;
-  if (input.payer?.email) body.payerEmail = input.payer.email;
   if (galiopay.authMode === "body") {
     body.apiKey = galiopay.apiKey;
+    body.clientId = galiopay.clientId;
   }
   return body;
 }
@@ -106,8 +109,12 @@ function normalizeResponse(payload: unknown, input: CreatePaymentInput): CreateP
   const expiresAt =
     asString(pick(data, ["expiresAt", "expires_at", "expiration", "dueDate"])) ?? null;
 
+  const linkId = checkoutUrl
+    ? (checkoutUrl.split("/payment/")[1]?.split("?")[0] ?? null)
+    : null;
+
   return {
-    providerPaymentId: providerPaymentId ?? null,
+    providerPaymentId: providerPaymentId ?? linkId,
     providerStatus,
     checkoutUrl: checkoutUrl ?? (qrData ? null : input.callbackUrl),
     qrData: qrData ?? null,

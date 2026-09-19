@@ -8,6 +8,7 @@ export type UseMagonSubscriptionOptions = {
   apiBaseUrl?: string;
   pollIntervalMs?: number;
   enabled?: boolean;
+  returnUrl?: string;
 };
 
 export type UseMagonSubscriptionResult = {
@@ -33,6 +34,7 @@ export function useMagonSubscription(
     apiBaseUrl = "",
     pollIntervalMs = 15000,
     enabled = true,
+    returnUrl,
   } = options;
 
   const base = apiBaseUrl.replace(/\/$/, "");
@@ -84,10 +86,15 @@ export function useMagonSubscription(
     setCreatingCheckout(true);
     setCheckoutError(null);
     try {
+      const target =
+        returnUrl ??
+        (typeof window !== "undefined"
+          ? `${window.location.origin}${window.location.pathname}`
+          : undefined);
       const response = await fetch(`${base}/api/payments/create`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clientKey }),
+        body: JSON.stringify({ clientKey, returnUrl: target }),
         cache: "no-store",
       });
       const data = (await response.json()) as CheckoutEnvelope;
@@ -105,7 +112,7 @@ export function useMagonSubscription(
     } finally {
       setCreatingCheckout(false);
     }
-  }, [base, clientKey, refresh]);
+  }, [base, clientKey, refresh, returnUrl]);
 
   useEffect(() => {
     if (!enabled) {

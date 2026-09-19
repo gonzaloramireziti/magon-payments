@@ -17,12 +17,16 @@ export async function POST(request: NextRequest) {
     (typeof body.clientKey === "string" ? body.clientKey : null) ??
     getClientKeyFromRequest(request);
 
+  const returnUrl =
+    (typeof body.returnUrl === "string" ? body.returnUrl : null) ??
+    (typeof body.returnTo === "string" ? body.returnTo : null);
+
   if (!clientKey) {
     return errorJson("Falta la KEY del cliente", 400, "MISSING_KEY");
   }
 
   try {
-    const checkout = await createCheckout(clientKey);
+    const checkout = await createCheckout(clientKey, returnUrl);
     return okJson({ checkout });
   } catch (error) {
     console.error("[api/payments/create]", error);

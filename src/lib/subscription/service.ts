@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { subscription, appUrl, galiopay, webhookUrl } from "@/lib/env";
+import { subscription, appUrl, galiopay, webhookUrl, corsOrigins } from "@/lib/env";
 import {
   getPeriodInfo,
   formatPeriodLabel,
@@ -96,6 +96,33 @@ function toNumber(value: number | string | null | undefined): number {
 
 function periodInfo(): PeriodInfo {
   return getPeriodInfo(new Date(), subscription.timezone, subscription.dueDay);
+}
+
+function safeReturnUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+
+  const configured = corsOrigins.trim();
+  if (configured && configured !== "*") {
+    const allowlist = configured
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    if (!allowlist.includes(url.origin)) return null;
+  }
+  return url.toString();
+}
+
+function withParam(url: string, key: string, value: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set(key, value);
+  return parsed.toString();
 }
 
 export async function findClientByKey(clientKey: string): Promise<ClientRow | null> {
@@ -244,7 +271,10 @@ export async function getSubscriptionStatus(clientKey: string): Promise<Subscrip
   };
 }
 
-export async function createCheckout(clientKey: string): Promise<CheckoutSession> {
+export async function createCheckout(
+  clientKey: string,
+  returnUrl?: string | null
+): Promise<CheckoutSession> {
   const status = await getSubscriptionStatus(clientKey);
   if (!status.found) {
     throw new SubscriptionError("CLIENT_NOT_FOUND", 404, "Cliente no encontrado");
@@ -272,6 +302,10 @@ export async function createCheckout(clientKey: string): Promise<CheckoutSession
   const reference = `magon-${status.period}-${paymentId}`;
   const description = `Servicio de software - ${status.periodLabel}`.trim();
 
+  const returnTo = safeReturnUrl(returnUrl) ?? `${appUrl.replace(/\/$/, "")}/pago`;
+  const successUrl = withParam(returnTo, "paid", "1");
+  const failureUrl = withParam(returnTo, "paid", "0");
+
   const result = await createGalioPayPayment({
     amount: status.amountDue,
     currency: status.currency,
@@ -279,7 +313,8 @@ export async function createCheckout(clientKey: string): Promise<CheckoutSession
     paymentId,
     description,
     webhookUrl: webhookUrl(),
-    callbackUrl: `${appUrl.replace(/\/$/, "")}/?paid=1`,
+    successUrl,
+    failureUrl,
     payer: { name: status.clientName ?? undefined, email: status.clientEmail ?? undefined },
   });
 

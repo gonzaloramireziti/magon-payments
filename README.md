@@ -73,6 +73,8 @@ Integración ya implementada contra la API real ([docs](https://pay.galio.app/do
 - Base: `https://pay.galio.app/api`, endpoint `POST /payment-links` (`GALIOPAY_CREATE_PAYMENT_PATH=/payment-links`).
 - Auth: `Authorization: Bearer {API_KEY}` + `x-client-id: {CLIENT_ID}` (`GALIOPAY_AUTH_MODE=bearer`).
 - Se crea un **payment link** con `items`, `referenceId`, `notificationUrl` y `backUrl`; la respuesta `url` es la pasarela.
+- El `backUrl` de éxito/fallo apunta a la **app del cliente**: el componente envía `returnUrl` con su URL actual.
+  Si no se envía, se usa `https://TU-DOMINIO/pago` (página neutral del backend).
 - `GALIOPAY_SANDBOX=true` crea links de prueba (solo aplica con `GALIOPAY_MODE=live`).
 
 El webhook entiende el payload de GalioPay (`approved` y `refunded`) y valida la firma opcional
@@ -225,6 +227,7 @@ Props principales:
 | `clientKey` | `string` | KEY del cliente (obligatoria) |
 | `apiBaseUrl` | `string` | URL del backend; vacío = mismo origen |
 | `pollIntervalMs` | `number` | Frecuencia de re-chequeo (default 15000) |
+| `returnUrl` | `string` | A dónde vuelve GalioPay tras pagar. Por defecto, la página actual del cliente |
 | `theme` | `MagonPayTheme` | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | Textos (i18n) |
 | `logoSrc` | `string` | URL del logo; si no se pasa usa el `MagonLogo` SVG incluido |

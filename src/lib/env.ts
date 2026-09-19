@@ -43,6 +43,7 @@ export const subscription = {
 
 export const adminApiKey = process.env.ADMIN_API_KEY ?? "";
 export const cronSecret = process.env.CRON_SECRET ?? "";
+export const corsOrigins = process.env.CORS_ORIGINS ?? "*";
 
 export function supabaseConfig(): { url: string; serviceRoleKey: string } {
   return {

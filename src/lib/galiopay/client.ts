@@ -7,7 +7,8 @@ export type CreatePaymentInput = {
   paymentId: string;
   description: string;
   webhookUrl: string;
-  callbackUrl: string;
+  successUrl: string;
+  failureUrl: string;
   payer?: { name?: string; email?: string };
 };
 
@@ -69,8 +70,8 @@ function buildRequestBody(input: CreatePaymentInput): Record<string, unknown> {
     referenceId: input.referenceId,
     notificationUrl: input.webhookUrl,
     backUrl: {
-      success: input.callbackUrl,
-      failure: input.callbackUrl,
+      success: input.successUrl,
+      failure: input.failureUrl,
     },
     sandbox: galiopay.sandbox,
   };
@@ -116,7 +117,7 @@ function normalizeResponse(payload: unknown, input: CreatePaymentInput): CreateP
   return {
     providerPaymentId: providerPaymentId ?? linkId,
     providerStatus,
-    checkoutUrl: checkoutUrl ?? (qrData ? null : input.callbackUrl),
+    checkoutUrl: checkoutUrl ?? (qrData ? null : input.successUrl),
     qrData: qrData ?? null,
     expiresAt,
     raw: payload,

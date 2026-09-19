@@ -27,6 +27,7 @@ export type MagonPayGateProps = {
   clientKey: string;
   apiBaseUrl?: string;
   pollIntervalMs?: number;
+  returnUrl?: string;
   theme?: MagonPayTheme;
   labels?: Partial<MagonPayLabels>;
   logoSrc?: string;
@@ -44,6 +45,7 @@ export function MagonPayGate(props: MagonPayGateProps) {
     clientKey,
     apiBaseUrl = "",
     pollIntervalMs = 15000,
+    returnUrl,
     theme,
     labels,
     logoSrc,
@@ -56,7 +58,7 @@ export function MagonPayGate(props: MagonPayGateProps) {
     onStatusChange,
   } = props;
 
-  const subscription = useMagonSubscription({ clientKey, apiBaseUrl, pollIntervalMs });
+  const subscription = useMagonSubscription({ clientKey, apiBaseUrl, pollIntervalMs, returnUrl });
   const { status, loading, error, refresh, createCheckout, creatingCheckout, checkoutError, checkout, refreshing } =
     subscription;
 

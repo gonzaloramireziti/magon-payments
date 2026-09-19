@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MagonPayGate } from "magon-pay-react";
 
-const DEFAULT_KEY = process.env.NEXT_PUBLIC_DEMO_CLIENT_KEY ?? "magon-demo-key";
+const DEFAULT_KEY = process.env.NEXT_PUBLIC_DEMO_CLIENT_KEY || "magon-demo-key";
 
 export default function HomePage() {
   const [clientKey, setClientKey] = useState(DEFAULT_KEY);

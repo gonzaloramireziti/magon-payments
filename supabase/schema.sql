@@ -13,6 +13,8 @@ create table if not exists public.clients (
   currency text not null default 'ARS',
   active boolean not null default true,
   notes text,
+  -- Primer período facturable (YYYY-MM). Si es null se usa el mes de created_at.
+  start_period text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

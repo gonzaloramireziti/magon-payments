@@ -1,6 +1,7 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { MagonLogo } from "./MagonLogo";
 import {
   DEFAULT_LABELS,
   DEFAULT_THEME,
@@ -20,6 +21,9 @@ export type PaymentBlockedScreenProps = {
   onRefresh: () => void;
   theme?: MagonPayTheme;
   labels?: Partial<MagonPayLabels>;
+  logoSrc?: string;
+  logo?: ReactNode;
+  logoAlt?: string;
 };
 
 function formatMoney(amount: number, currency: string): string {
@@ -55,10 +59,25 @@ export function PaymentBlockedScreen(props: PaymentBlockedScreenProps) {
     onRefresh,
     theme,
     labels,
+    logoSrc,
+    logo,
+    logoAlt,
   } = props;
 
   const t = { ...DEFAULT_THEME, ...theme };
   const l = { ...DEFAULT_LABELS, ...labels };
+
+  const logoNode = logo ?? (
+    logoSrc ? (
+      <img
+        src={logoSrc}
+        alt={logoAlt ?? "Magon"}
+        style={{ height: 64, width: "auto", maxWidth: "100%", objectFit: "contain" }}
+      />
+    ) : (
+      <MagonLogo size={72} color={t.text} />
+    )
+  );
 
   const styles: Record<string, CSSProperties> = {
     wrapper: {
@@ -78,8 +97,14 @@ export function PaymentBlockedScreen(props: PaymentBlockedScreenProps) {
       border: `1px solid ${t.border}`,
       borderRadius: t.radius,
       padding: 28,
-      boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+      boxShadow: "0 24px 60px rgba(0, 0, 0, 0.55)",
       boxSizing: "border-box",
+    },
+    logoWrap: {
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 18,
     },
     badge: {
       display: "inline-block",
@@ -177,6 +202,7 @@ export function PaymentBlockedScreen(props: PaymentBlockedScreenProps) {
     return (
       <div style={styles.wrapper}>
         <div style={styles.card}>
+          <div style={styles.logoWrap}>{logoNode}</div>
           <div style={styles.badge}>{l.contact}</div>
           <h1 style={styles.title}>{l.notFoundTitle}</h1>
           <p style={styles.subtitle}>{l.contact}</p>
@@ -189,6 +215,7 @@ export function PaymentBlockedScreen(props: PaymentBlockedScreenProps) {
     return (
       <div style={styles.wrapper}>
         <div style={styles.card}>
+          <div style={styles.logoWrap}>{logoNode}</div>
           <div style={styles.badge}>{l.contact}</div>
           <h1 style={styles.title}>{l.inactiveTitle}</h1>
           <p style={styles.subtitle}>{l.contact}</p>
@@ -206,6 +233,7 @@ export function PaymentBlockedScreen(props: PaymentBlockedScreenProps) {
   return (
     <div style={styles.wrapper}>
       <div style={styles.card}>
+        <div style={styles.logoWrap}>{logoNode}</div>
         <div style={styles.badge}>
           {status.state === "blocked" ? l.overdue : status.periodLabel}
         </div>

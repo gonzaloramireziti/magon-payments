@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export type MagonSubscriptionState =
   | "active"
   | "due"
@@ -80,18 +82,27 @@ export type MagonPayLabels = {
   refreshing: string;
   contact: string;
   error: string;
+  receiptsTitle: string;
+  downloadReceipt: string;
+  noReceipts: string;
+};
+
+export type MagonBranding = {
+  logoSrc?: string;
+  logo?: ReactNode;
+  logoAlt?: string;
 };
 
 export const DEFAULT_THEME: Required<MagonPayTheme> = {
-  primary: "#6d28d9",
-  primaryText: "#ffffff",
-  background: "#f8fafc",
-  surface: "#ffffff",
-  text: "#0f172a",
-  muted: "#64748b",
-  danger: "#dc2626",
-  border: "#e2e8f0",
-  radius: 14,
+  primary: "#ffffff",
+  primaryText: "#0a0a0a",
+  background: "#08080b",
+  surface: "#121216",
+  text: "#f4f4f5",
+  muted: "#a1a1aa",
+  danger: "#f87171",
+  border: "#27272a",
+  radius: 16,
   fontFamily:
     "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
 };
@@ -117,4 +128,7 @@ export const DEFAULT_LABELS: MagonPayLabels = {
   refreshing: "Actualizando...",
   contact: "Contactá a Magon para regularizar tu situación.",
   error: "No se pudo verificar la suscripción",
+  receiptsTitle: "Comprobantes de pago",
+  downloadReceipt: "Descargar comprobante",
+  noReceipts: "Todavía no hay comprobantes disponibles",
 };

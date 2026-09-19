@@ -14,7 +14,6 @@ export default function HomePage() {
       clientKey={activeKey}
       apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL ?? ""}
       pollIntervalMs={15000}
-      theme={{ primary: "#6d28d9" }}
     >
       <main
         style={{

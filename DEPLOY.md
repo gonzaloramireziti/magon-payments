@@ -22,6 +22,8 @@ Vercel corre el backend y el dominio `pay.magon.com` apunta ahí. Supabase sólo
 
 1. Crear proyecto en [supabase.com](https://supabase.com).
 2. SQL Editor → pegar y ejecutar `supabase/schema.sql`.
+   - Si la base ya existía antes del cambio de ciclo de facturación, ejecutá también
+     `supabase/migrations/001_billing_cycle.sql`.
 3. Anotar de **Project Settings → API**:
    - `Project URL` → `SUPABASE_URL`
    - `service_role` (secret) → `SUPABASE_SERVICE_ROLE_KEY`
@@ -108,6 +110,9 @@ https://pay.magon.com/api/webhooks/galiopay
 ```bash
 # Estado de suscripción (cliente demo del schema)
 curl "https://pay.magon.com/api/subscription/status?key=magon-demo-key"
+
+# Comprobante PDF de una factura paga
+curl -o comprobante.pdf "https://pay.magon.com/api/receipts?key=magon-demo-key&period=2026-08"
 
 # Crear un cliente real y obtener su KEY
 curl -X POST https://pay.magon.com/api/admin/clients \

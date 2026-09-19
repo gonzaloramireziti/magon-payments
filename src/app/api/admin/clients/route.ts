@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
       currency: typeof body.currency === "string" ? body.currency : "ARS",
       active: body.active === undefined ? true : Boolean(body.active),
       notes: typeof body.notes === "string" ? body.notes : null,
+      start_period: typeof body.startPeriod === "string" ? body.startPeriod : null,
     })
     .select("*")
     .single();
@@ -111,6 +112,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.currency === "string") update.currency = body.currency;
   if (body.active !== undefined) update.active = Boolean(body.active);
   if (typeof body.notes === "string" || body.notes === null) update.notes = body.notes;
+  if (typeof body.startPeriod === "string" || body.startPeriod === null) {
+    update.start_period = body.startPeriod;
+  }
   if (typeof body.clientKey === "string" && body.clientKey.trim() !== "") {
     update.client_key = body.clientKey.trim();
   }

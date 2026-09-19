@@ -35,8 +35,11 @@ Si el backend corre en el mismo dominio, omití `apiBaseUrl`.
 | `clientKey` | `string` | — | KEY del cliente (obligatoria) |
 | `apiBaseUrl` | `string` | `""` | URL del backend Magon (vacío = mismo origen) |
 | `pollIntervalMs` | `number` | `15000` | Re-chequeo del estado mientras está bloqueado |
-| `theme` | `MagonPayTheme` | — | Colores, radio y tipografía |
+| `theme` | `MagonPayTheme` | — | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | — | Textos |
+| `logoSrc` | `string` | — | URL del logo (PNG/SVG). Si no se pasa, usa el logo Magon SVG incluido |
+| `logo` | `ReactNode` | — | Logo propio (JSX/SVG), tiene prioridad sobre `logoSrc` |
+| `logoAlt` | `string` | `"Magon"` | Texto alternativo del logo |
 | `enforce` | `boolean` | `true` | `false` no bloquea (solo informa por `onStatusChange`) |
 | `renderBlocked` | `(ctx) => ReactNode` | — | UI de bloqueo propia |
 | `renderLoading` | `() => ReactNode` | — | UI de carga propia |
@@ -48,17 +51,56 @@ Si el backend corre en el mismo dominio, omití `apiBaseUrl`.
 import {
   useMagonSubscription,
   PaymentBlockedScreen,
+  MagonLogo,
+  MagonReceipts,
   type MagonSubscriptionStatus,
 } from "magon-pay-react";
 ```
 
+### Comprobantes de pago
+
+```tsx
+import { MagonReceipts } from "magon-pay-react";
+
+<MagonReceipts clientKey="magon_xxx" apiBaseUrl="https://pay.magon.com" />
+```
+
+Lista las facturas pagas con un botón para descargar el comprobante PDF (lo genera el backend).
+
+### Logo
+
+Por defecto usa un logo **Magon** SVG (blanco, pensado para fondo oscuro). Para usar tu archivo exacto:
+
+```tsx
+<MagonPayGate clientKey="magon_xxx" apiBaseUrl="https://pay.magon.com" logoSrc="/logo-magon.png">
+  <TuApp />
+</MagonPayGate>
+```
+
+También podés pasar un SVG/JSX propio:
+
+```tsx
+<MagonPayGate clientKey="magon_xxx" logo={<MiLogo />}>
+  <TuApp />
+</MagonPayGate>
+```
+
+Se exporta `MagonLogo` por si querés reutilizarlo:
+
+```tsx
+import { MagonLogo } from "magon-pay-react";
+<MagonLogo size={64} color="#ffffff" />
+```
+
 ### Tema y textos
+
+El tema por defecto es oscuro. Para forzar uno claro:
 
 ```tsx
 <MagonPayGate
   clientKey="magon_xxx"
   apiBaseUrl="https://pay.magon.com"
-  theme={{ primary: "#0d9488", background: "#0b0b0f", text: "#f8fafc", surface: "#111827" }}
+  theme={{ background: "#f8fafc", surface: "#ffffff", text: "#0f172a", muted: "#64748b", border: "#e2e8f0", primary: "#6d28d9", primaryText: "#ffffff" }}
   labels={{ title: "Pago pendiente", payNow: "Transferir" }}
 >
   <TuApp />

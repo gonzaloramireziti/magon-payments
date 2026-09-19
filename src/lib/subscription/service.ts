@@ -1,6 +1,13 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { subscription, appUrl, galiopay, webhookUrl } from "@/lib/env";
-import { getPeriodInfo, formatPeriodLabel, type PeriodInfo } from "@/lib/subscription/period";
+import {
+  getPeriodInfo,
+  formatPeriodLabel,
+  periodOf,
+  dueDateForPeriod,
+  addMonths,
+  type PeriodInfo,
+} from "@/lib/subscription/period";
 import { createGalioPayPayment } from "@/lib/galiopay/client";
 
 export type ClientRow = {
@@ -12,6 +19,7 @@ export type ClientRow = {
   currency: string;
   active: boolean;
   notes: string | null;
+  start_period: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -101,42 +109,33 @@ export async function findClientByKey(clientKey: string): Promise<ClientRow | nu
   return (data as ClientRow | null) ?? null;
 }
 
-async function ensureInvoice(client: ClientRow, info: PeriodInfo): Promise<InvoiceRow> {
+async function ensureInvoices(client: ClientRow, info: PeriodInfo): Promise<void> {
   const supabase = getSupabaseAdmin();
-  const existing = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("client_id", client.id)
-    .eq("period", info.period)
-    .maybeSingle();
-  if (existing.error) throw existing.error;
-  if (existing.data) return existing.data as InvoiceRow;
+  const startPeriod =
+    client.start_period ??
+    periodOf(new Date(client.created_at), subscription.timezone);
 
-  const inserted = await supabase
-    .from("invoices")
-    .insert({
-      client_id: client.id,
-      period: info.period,
-      amount: toNumber(client.monthly_amount),
-      currency: client.currency,
-      due_date: info.dueDate,
-      status: "pending",
-    })
-    .select("*")
-    .single();
-
-  if (inserted.error) {
-    const again = await supabase
-      .from("invoices")
-      .select("*")
-      .eq("client_id", client.id)
-      .eq("period", info.period)
-      .maybeSingle();
-    if (again.error) throw again.error;
-    if (again.data) return again.data as InvoiceRow;
-    throw inserted.error;
+  const periods: string[] = [];
+  let cursor = startPeriod;
+  while (cursor <= info.billingPeriod && periods.length < 120) {
+    periods.push(cursor);
+    cursor = addMonths(cursor, 1);
   }
-  return inserted.data as InvoiceRow;
+  if (periods.length === 0) return;
+
+  const rows = periods.map((period) => ({
+    client_id: client.id,
+    period,
+    amount: toNumber(client.monthly_amount),
+    currency: client.currency,
+    due_date: dueDateForPeriod(period, subscription.dueDay),
+    status: "pending",
+  }));
+
+  const { error } = await supabase
+    .from("invoices")
+    .upsert(rows, { onConflict: "client_id,period", ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 async function syncOverdue(clientId: string, today: string): Promise<void> {
@@ -162,8 +161,8 @@ export async function getSubscriptionStatus(clientKey: string): Promise<Subscrip
     amount: 0,
     amountDue: 0,
     currency: galiopay.currency,
-    period: info.period,
-    periodLabel: formatPeriodLabel(info.period),
+    period: info.billingPeriod,
+    periodLabel: formatPeriodLabel(info.billingPeriod),
     dueDate: info.dueDate,
     today: info.today,
     daysUntilDue: info.daysUntilDue,
@@ -176,10 +175,18 @@ export async function getSubscriptionStatus(clientKey: string): Promise<Subscrip
   const client = await findClientByKey(clientKey);
   if (!client) return empty;
   if (!client.active) {
-    return { ...empty, found: true, active: false, state: "inactive", clientId: client.id, clientName: client.name, clientEmail: client.email };
+    return {
+      ...empty,
+      found: true,
+      active: false,
+      state: "inactive",
+      clientId: client.id,
+      clientName: client.name,
+      clientEmail: client.email,
+    };
   }
 
-  await ensureInvoice(client, info);
+  await ensureInvoices(client, info);
   await syncOverdue(client.id, info.today);
 
   const supabase = getSupabaseAdmin();
@@ -220,8 +227,8 @@ export async function getSubscriptionStatus(clientKey: string): Promise<Subscrip
     amount: toNumber(client.monthly_amount),
     amountDue,
     currency: client.currency,
-    period: info.period,
-    periodLabel: formatPeriodLabel(info.period),
+    period: info.billingPeriod,
+    periodLabel: formatPeriodLabel(info.billingPeriod),
     dueDate: info.dueDate,
     today: info.today,
     daysUntilDue: info.daysUntilDue,
@@ -242,7 +249,7 @@ export async function createCheckout(clientKey: string): Promise<CheckoutSession
   if (!status.found) {
     throw new SubscriptionError("CLIENT_NOT_FOUND", 404, "Cliente no encontrado");
   }
-  if (!status.active && status.state === "inactive") {
+  if (status.state === "inactive") {
     throw new SubscriptionError("CLIENT_INACTIVE", 403, "Cliente inactivo");
   }
 
@@ -263,7 +270,7 @@ export async function createCheckout(clientKey: string): Promise<CheckoutSession
   const supabase = getSupabaseAdmin();
   const paymentId = crypto.randomUUID();
   const reference = `magon-${status.period}-${paymentId}`;
-  const description = `Suscripción Magon ${status.clientName ?? ""} ${status.periodLabel}`.trim();
+  const description = `Servicio de software - ${status.periodLabel}`.trim();
 
   const result = await createGalioPayPayment({
     amount: status.amountDue,

@@ -1,6 +1,6 @@
 {
   "name": "magon-pay-react",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Gate de suscripciones Magon para React: bloquea el acceso hasta que el cliente pague",
   "license": "MIT",
   "type": "module",

@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useMagonSubscription } from "./useSubscription";
 import { PaymentBlockedScreen } from "./PaymentBlockedScreen";
+import { MagonLogo } from "./MagonLogo";
 import {
   DEFAULT_LABELS,
   DEFAULT_THEME,
@@ -28,6 +29,9 @@ export type MagonPayGateProps = {
   pollIntervalMs?: number;
   theme?: MagonPayTheme;
   labels?: Partial<MagonPayLabels>;
+  logoSrc?: string;
+  logo?: ReactNode;
+  logoAlt?: string;
   children: ReactNode;
   enforce?: boolean;
   renderBlocked?: (context: MagonPayGateRenderContext) => ReactNode;
@@ -42,6 +46,9 @@ export function MagonPayGate(props: MagonPayGateProps) {
     pollIntervalMs = 15000,
     theme,
     labels,
+    logoSrc,
+    logo,
+    logoAlt,
     children,
     enforce = true,
     renderBlocked,
@@ -60,6 +67,18 @@ export function MagonPayGate(props: MagonPayGateProps) {
   const t = { ...DEFAULT_THEME, ...theme };
   const l = { ...DEFAULT_LABELS, ...labels };
 
+  const logoNode =
+    logo ??
+    (logoSrc ? (
+      <img
+        src={logoSrc}
+        alt={logoAlt ?? "Magon"}
+        style={{ height: 56, width: "auto", maxWidth: "100%", objectFit: "contain" }}
+      />
+    ) : (
+      <MagonLogo size={64} color={t.text} />
+    ));
+
   if (!enforce) {
     return <>{children}</>;
   }
@@ -71,6 +90,8 @@ export function MagonPayGate(props: MagonPayGateProps) {
         style={{
           minHeight: "100vh",
           display: "flex",
+          flexDirection: "column",
+          gap: 18,
           alignItems: "center",
           justifyContent: "center",
           background: t.background,
@@ -79,6 +100,7 @@ export function MagonPayGate(props: MagonPayGateProps) {
           fontSize: 15,
         }}
       >
+        {logoNode}
         {l.loading}
       </div>
     );
@@ -90,6 +112,8 @@ export function MagonPayGate(props: MagonPayGateProps) {
         style={{
           minHeight: "100vh",
           display: "flex",
+          flexDirection: "column",
+          gap: 18,
           alignItems: "center",
           justifyContent: "center",
           background: t.background,
@@ -99,6 +123,7 @@ export function MagonPayGate(props: MagonPayGateProps) {
           textAlign: "center",
         }}
       >
+        {logoNode}
         {error ? `${l.error}: ${error}` : l.error}
       </div>
     );
@@ -135,6 +160,9 @@ export function MagonPayGate(props: MagonPayGateProps) {
         }}
         theme={theme}
         labels={labels}
+        logoSrc={logoSrc}
+        logo={logo}
+        logoAlt={logoAlt}
       />
     );
   }

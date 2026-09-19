@@ -14,13 +14,17 @@ Incluye un componente React (`<MagonPayGate>`) sin dependencias externas, integr
    - Si debe o está vencido → muestra la pantalla de pago y **bloquea el contenido**.
 4. El pago se genera con `POST /api/payments/create` (adapter GalioPay).
 5. GalioPay notifica a `POST /api/webhooks/galiopay`, que marca la factura como pagada (idempotente).
+6. Con la factura paga se puede descargar el **comprobante PDF** (`GET /api/receipts`).
 
-Regla de vencimiento (`src/lib/subscription/period.ts`):
+Regla de facturación (`src/lib/subscription/period.ts`) — **siempre contra factura**:
 
-- Período = mes calendario (`YYYY-MM`), vence el **10** a las 23:59 (timezone `America/Argentina/Buenos_Aires`).
-- Día 1–10: se permite el acceso pero se muestra "vence pronto".
-- Día 11 en adelante: **bloqueado** si la factura del período sigue impaga.
-- Si quedó una factura impaga de meses anteriores, sigue bloqueado hasta regularizar todo (pago asignado FIFO a las facturas más antiguas).
+- El servicio de un mes se paga al mes siguiente. Ej: el servicio de **agosto** (período `2026-08`)
+  vence el **10 de septiembre** (`due_date = 2026-09-10`).
+- Del día 1 al 10: se permite el acceso (la factura del mes anterior vence ese día).
+- Desde el **11**: **bloqueado** si la factura vencida sigue impaga.
+- Facturas de meses anteriores impagas mantienen el bloqueo hasta regularizar todo
+  (el pago se asigna FIFO a las facturas más antiguas).
+- `clients.start_period` (`YYYY-MM`) define el primer período facturable; si es `null` se usa el mes de alta.
 
 ## Puesta en marcha
 
@@ -35,6 +39,9 @@ npm run dev                  # http://localhost:3000
 1. Crear proyecto en Supabase.
 2. SQL Editor → ejecutar `supabase/schema.sql`.
 3. Copiar `Project URL` y `service_role key` a `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`.
+
+> Si ya tenías la base creada antes del cambio de ciclo de facturación, ejecutá también
+> `supabase/migrations/001_billing_cycle.sql` (agrega `start_period` y hace el backfill).
 
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
@@ -123,6 +130,7 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `POST` | `/api/webhooks/galiopay` | Webhook de GalioPay (idempotente) |
 | `GET/POST/PATCH` | `/api/admin/clients` | Alta/edición de clientes (header `x-admin-key`) |
 | `GET/POST` | `/api/cron/invoices` | Genera facturas del período y marca vencidas (`x-cron-secret`) |
+| `GET` | `/api/receipts?key=KEY&invoiceId=...` | Comprobante de pago en PDF (factura paga) |
 | `GET` | `/api/protected` | Ejemplo de recurso protegido por suscripción |
 | `POST` | `/api/mock/pay` | Solo en modo mock: simula webhook aprobado |
 
@@ -217,14 +225,35 @@ Props principales:
 | `clientKey` | `string` | KEY del cliente (obligatoria) |
 | `apiBaseUrl` | `string` | URL del backend; vacío = mismo origen |
 | `pollIntervalMs` | `number` | Frecuencia de re-chequeo (default 15000) |
-| `theme` | `MagonPayTheme` | Colores, radio y tipografía |
+| `theme` | `MagonPayTheme` | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | Textos (i18n) |
+| `logoSrc` | `string` | URL del logo; si no se pasa usa el `MagonLogo` SVG incluido |
+| `logo` | `ReactNode` | Logo propio (prioridad sobre `logoSrc`) |
+| `logoAlt` | `string` | Alt del logo (default `"Magon"`) |
 | `enforce` | `boolean` | `false` renderiza siempre `children` (default `true`) |
 | `renderBlocked` | `(ctx) => ReactNode` | UI de bloqueo personalizada |
 | `renderLoading` | `() => ReactNode` | UI de carga personalizada |
 | `onStatusChange` | `(status) => void` | Callback con el estado actualizado |
 
-También se exporta el hook `useMagonSubscription()` y la pantalla `PaymentBlockedScreen`.
+También se exporta el hook `useMagonSubscription()`, la pantalla `PaymentBlockedScreen`, el logo
+`MagonLogo` y el componente de comprobantes `MagonReceipts`.
+
+### Comprobantes de pago (PDF)
+
+`MagonReceipts` lista las facturas pagas y ofrece el comprobante descargable:
+
+```tsx
+import { MagonReceipts } from "magon-pay-react";
+
+<MagonReceipts
+  clientKey="magon_xxxx"
+  apiBaseUrl="https://api-magonpayments.magonservices.cloud"
+/>
+```
+
+El PDF (blanco y negro) lo genera el backend en `GET /api/receipts?key=...&invoiceId=...`, con el
+desglose del servicio de software (hosting, base de datos, dominio, mantenimiento funcional, soporte).
+Los textos del comprobante se editan en `src/lib/receipts/config.ts`.
 
 ## Seguridad (importante)
 

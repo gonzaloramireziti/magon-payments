@@ -1,5 +1,6 @@
 export type PeriodInfo = {
-  period: string;
+  billingPeriod: string;
+  currentPeriod: string;
   year: number;
   month: number;
   day: number;
@@ -52,11 +53,13 @@ export function getPeriodInfo(
   dueDay = 10
 ): PeriodInfo {
   const { year, month, day, today } = localDateParts(now, timezone);
-  const period = `${year}-${pad(month)}`;
-  const dueDate = `${period}-${pad(dueDay)}`;
+  const currentPeriod = `${year}-${pad(month)}`;
+  const billingPeriod = addMonths(currentPeriod, -1);
+  const dueDate = `${currentPeriod}-${pad(dueDay)}`;
   const daysUntilDue = diffInDays(today, dueDate);
   return {
-    period,
+    billingPeriod,
+    currentPeriod,
     year,
     month,
     day,
@@ -65,6 +68,15 @@ export function getPeriodInfo(
     daysUntilDue,
     isPastDue: daysUntilDue < 0,
   };
+}
+
+export function periodOf(date: Date, timezone: string): string {
+  const { year, month } = localDateParts(date, timezone);
+  return `${year}-${pad(month)}`;
+}
+
+export function dueDateForPeriod(period: string, dueDay = 10): string {
+  return `${addMonths(period, 1)}-${pad(dueDay)}`;
 }
 
 export function addMonths(period: string, delta: number): string {

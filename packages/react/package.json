@@ -28,8 +28,12 @@
   ],
   "scripts": {
     "build": "tsup && node scripts/add-use-client.mjs",
+    "prepare": "npm run build",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "react": ">=18"

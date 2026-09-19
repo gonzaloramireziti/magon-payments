@@ -163,11 +163,15 @@ npm i /ruta/a/magon-pay-react-1.0.0.tgz
 
 ### C) Desde GitHub
 
-Si subís el paquete a su propio repo (o ponés `packages/react` en la raíz de un repo):
+Subí el `.tgz` como asset de un **Release** e instalalo por URL:
 
 ```bash
-npm i github:TU-USUARIO/magon-pay-react
+npm i https://github.com/TU-USUARIO/magon-payments/releases/download/v1.0.0/magon-pay-react-1.0.0.tgz
 ```
+
+O publicá `packages/react` como repo propio e instalá `npm i github:TU-USUARIO/magon-pay-react`.
+
+Guía completa de publicación (tarball, git subtree, npm registry): [`PUBLICAR.md`](./PUBLICAR.md).
 
 ### Uso
 

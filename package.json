@@ -1,0 +1,31 @@
+{
+  "name": "magon-payments",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend de suscripciones Magon (Next.js + Supabase + GalioPay) y paquete React magon-pay-react",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build:react": "npm --workspace magon-pay-react run build",
+    "pack:react": "npm run build:react && npm --workspace magon-pay-react pack",
+    "predev": "npm run build:react",
+    "dev": "next dev",
+    "prebuild": "npm run build:react",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.47.10",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.3"
+  }
+}

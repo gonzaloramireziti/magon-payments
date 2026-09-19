@@ -6,18 +6,18 @@ import { COLORS, Card, ghost, money } from "./ui";
 type Totals = { ars: number; usd: number; totalUsd: number; totalArs: number };
 
 type Dashboard = {
-  period: "month" | "all";
   rate: { usd: number; source: string; updatedAt: string; available: boolean };
   earnings: Totals;
+  collected: Totals;
   costs: Totals;
   net: { totalUsd: number; totalArs: number };
   debt: Totals & { clients: number };
+  clientsCount: number;
   costsCount: number;
 };
 
 export function AdminStats({ reloadKey }: { reloadKey: number }) {
   const [data, setData] = useState<Dashboard | null>(null);
-  const [period, setPeriod] = useState<"month" | "all">("month");
   const [showArs, setShowArs] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +26,7 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/dashboard?period=${period}`, { cache: "no-store" });
+      const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
       const json = await response.json();
       if (!response.ok || !json.ok) throw new Error(json.error ?? "Error");
       setData(json as Dashboard);
@@ -35,7 +35,7 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -55,16 +55,8 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
           marginBottom: 14,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 16 }}>Resumen</h2>
+        <h2 style={{ margin: 0, fontSize: 16 }}>Resumen mensual</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <select
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as "month" | "all")}
-            style={{ ...ghost, paddingRight: 10 }}
-          >
-            <option value="month">Mes actual</option>
-            <option value="all">Total histórico</option>
-          </select>
           <button style={ghost} onClick={() => setShowArs((value) => !value)}>
             {showArs ? "Ver en USD" : "Ver en ARS"}
           </button>
@@ -86,10 +78,14 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
               gap: 12,
             }}
           >
-            <Card title="Ganancias en USD" value={money(data.earnings.usd, "USD")} />
-            <Card title="Ganancias en ARS" value={money(data.earnings.ars, "ARS")} />
             <Card
-              title={`Ganancias totales (${showArs ? "ARS" : "USD"})`}
+              title="Ganancias fijas en USD"
+              value={money(data.earnings.usd, "USD")}
+              hint={`${data.clientsCount} cliente(s) activo(s)`}
+            />
+            <Card title="Ganancias fijas en ARS" value={money(data.earnings.ars, "ARS")} />
+            <Card
+              title={`Ganancias fijas totales (${showArs ? "ARS" : "USD"})`}
               value={fmt(data.earnings.totalUsd, data.earnings.totalArs)}
               hint={data.rate.available ? `Dólar oficial: $${data.rate.usd.toFixed(2)}` : "Sin cotización"}
             />
@@ -99,7 +95,7 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
               hint={`${data.costsCount} costo(s) · ARS ${money(data.costs.ars, "ARS")} + USD ${money(data.costs.usd, "USD")}`}
             />
             <Card
-              title={`Ganancia final (${showArs ? "ARS" : "USD"})`}
+              title={`Ganancia final mensual (${showArs ? "ARS" : "USD"})`}
               value={fmt(data.net.totalUsd, data.net.totalArs)}
               color={data.net.totalUsd >= 0 ? COLORS.ok : COLORS.danger}
             />
@@ -116,7 +112,7 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
               ? `Cotización dólar oficial: $${data.rate.usd.toFixed(2)} (${data.rate.source})`
               : "Cotización no disponible: configurá USD_RATE_FALLBACK para convertir."}
             {" · "}
-            {data.period === "month" ? "Ganancias del mes actual" : "Ganancias históricas"}
+            {`Cobrado este mes: ${money(data.collected.ars, "ARS")} + ${money(data.collected.usd, "USD")}`}
           </div>
         </>
       )}

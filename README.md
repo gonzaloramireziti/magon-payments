@@ -156,9 +156,10 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
 3. Podés: crear cliente (con `start_period`), editarlo, **borrarlo** (con confirmación; elimina en cascada
    sus facturas y pagos) y confirmar pago seleccionando facturas impagas + medio de pago + nota.
    Queda registrado como pago `provider = manual`.
-4. **Resumen (dashboard):** ganancias en ARS, en USD y totales convertidas con la **cotización del dólar
-   oficial en tiempo real** (con toggle USD ⇄ ARS), costos fijos mensuales, ganancia final y deuda actual.
-   Filtro por mes actual o histórico.
+4. **Resumen mensual (dashboard):** **ganancias fijas** (suma de las suscripciones de los clientes activos)
+   en ARS, en USD y totales convertidas con la **cotización del dólar oficial en tiempo real**
+   (toggle USD ⇄ ARS), costos fijos mensuales, **ganancia final mensual** y deuda actual.
+   Muestra además lo cobrado en el mes.
 5. **Costos fijos:** sección para cargar/editar/borrar costos en ARS o USD; se suman al total convertido.
 6. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
 

@@ -35,40 +35,41 @@ function totals(ars: number, usd: number, rate: number) {
 export async function GET(request: NextRequest) {
   if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
 
-  const period = new URL(request.url).searchParams.get("period") === "all" ? "all" : "month";
   const supabase = getSupabaseAdmin();
 
   try {
-    let paymentsQuery = supabase
-      .from("payments")
-      .select("amount,currency")
-      .eq("status", "approved");
-    if (period === "month") {
-      paymentsQuery = paymentsQuery.gte(
-        "created_at",
-        startOfLocalMonthISO(new Date(), subscription.timezone)
-      );
-    }
-
-    const [paymentsRes, costsRes, invoicesRes, rate] = await Promise.all([
-      paymentsQuery,
+    const [clientsRes, costsRes, invoicesRes, paymentsRes, rate] = await Promise.all([
+      supabase.from("clients").select("monthly_amount,currency").eq("active", true),
       supabase.from("costs").select("amount,currency").eq("active", true),
       supabase
         .from("invoices")
         .select("amount,currency,client_id")
         .in("status", ["pending", "overdue"]),
+      supabase
+        .from("payments")
+        .select("amount,currency")
+        .eq("status", "approved")
+        .gte("created_at", startOfLocalMonthISO(new Date(), subscription.timezone)),
       getUsdRate(),
     ]);
 
-    if (paymentsRes.error) throw paymentsRes.error;
+    if (clientsRes.error) throw clientsRes.error;
     if (costsRes.error) throw costsRes.error;
     if (invoicesRes.error) throw invoicesRes.error;
+    if (paymentsRes.error) throw paymentsRes.error;
 
-    const earningsRaw = sumByCurrency((paymentsRes.data ?? []) as MoneyRow[]);
+    const earningsRaw = sumByCurrency(
+      (clientsRes.data ?? []).map((client) => ({
+        amount: (client as { monthly_amount: number | string }).monthly_amount,
+        currency: (client as { currency: string }).currency,
+      }))
+    );
+    const collectedRaw = sumByCurrency((paymentsRes.data ?? []) as MoneyRow[]);
     const costsRaw = sumByCurrency((costsRes.data ?? []) as MoneyRow[]);
     const debtRaw = sumByCurrency((invoicesRes.data ?? []) as MoneyRow[]);
 
     const earnings = totals(earningsRaw.ars, earningsRaw.usd, rate.rate);
+    const collected = totals(collectedRaw.ars, collectedRaw.usd, rate.rate);
     const costs = totals(costsRaw.ars, costsRaw.usd, rate.rate);
     const debt = totals(debtRaw.ars, debtRaw.usd, rate.rate);
     const net = {
@@ -81,12 +82,13 @@ export async function GET(request: NextRequest) {
     ).size;
 
     return okJson({
-      period,
       rate: { usd: rate.rate, source: rate.source, updatedAt: rate.updatedAt, available: rate.rate > 0 },
       earnings,
+      collected,
       costs,
       net,
       debt: { ...debt, clients: debtClients },
+      clientsCount: (clientsRes.data ?? []).length,
       costsCount: (costsRes.data ?? []).length,
     });
   } catch (error) {

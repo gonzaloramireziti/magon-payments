@@ -16,11 +16,34 @@ type Dashboard = {
   costsCount: number;
 };
 
+const CURRENCY_STORAGE_KEY = "magon.admin.currency";
+
 export function AdminStats({ reloadKey }: { reloadKey: number }) {
   const [data, setData] = useState<Dashboard | null>(null);
   const [showArs, setShowArs] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(CURRENCY_STORAGE_KEY);
+      if (saved !== null) setShowArs(saved === "ARS");
+    } catch {
+      /* localStorage no disponible */
+    }
+  }, []);
+
+  const toggleCurrency = useCallback(() => {
+    setShowArs((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(CURRENCY_STORAGE_KEY, next ? "ARS" : "USD");
+      } catch {
+        /* localStorage no disponible */
+      }
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,7 +80,7 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
       >
         <h2 style={{ margin: 0, fontSize: 16 }}>Resumen mensual</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button style={ghost} onClick={() => setShowArs((value) => !value)}>
+          <button style={ghost} onClick={toggleCurrency}>
             {showArs ? "Ver en USD" : "Ver en ARS"}
           </button>
           <button style={ghost} onClick={() => void load()}>

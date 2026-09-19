@@ -16,6 +16,7 @@ export function AdminCosts({ onChanged }: { onChanged: () => void }) {
   const [costs, setCosts] = useState<Cost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", amount: "", currency: "ARS" });
   const [saving, setSaving] = useState(false);
@@ -89,13 +90,36 @@ export function AdminCosts({ onChanged }: { onChanged: () => void }) {
 
   return (
     <section style={{ marginBottom: 26 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>Costos fijos mensuales</h2>
-        <span style={{ fontSize: 12, color: COLORS.muted }}>
-          {money(totalArs, "ARS")} + {money(totalUsd, "USD")}
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          background: COLORS.surface,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 14,
+          padding: "14px 16px",
+          color: COLORS.text,
+          cursor: "pointer",
+          textAlign: "left",
+          marginBottom: open ? 14 : 0,
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, fontWeight: 700 }}>
+          <span style={{ color: COLORS.muted, fontSize: 11, width: 12 }}>{open ? "▼" : "▶"}</span>
+          Costos fijos mensuales
         </span>
-      </div>
+        <span style={{ fontSize: 12, color: COLORS.muted }}>
+          {costs.length} · {money(totalArs, "ARS")} + {money(totalUsd, "USD")}
+        </span>
+      </button>
 
+      {open && (
+        <>
       <form
         onSubmit={create}
         style={{
@@ -193,6 +217,8 @@ export function AdminCosts({ onChanged }: { onChanged: () => void }) {
           </div>
         ))}
       </div>
+        </>
+      )}
     </section>
   );
 }

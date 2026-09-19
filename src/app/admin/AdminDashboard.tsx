@@ -205,7 +205,7 @@ export function AdminDashboard() {
         padding: "28px 24px 60px",
       }}
     >
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         <header
           style={{
             display: "flex",
@@ -260,10 +260,10 @@ export function AdminDashboard() {
             background: COLORS.surface,
             border: `1px solid ${COLORS.border}`,
             borderRadius: 14,
-            overflow: "hidden",
+            overflowX: "auto",
           }}
         >
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <table style={{ width: "100%", minWidth: 1080, borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: "left", color: COLORS.muted, fontSize: 11, textTransform: "uppercase" }}>
                 <th style={th}>Cliente</th>

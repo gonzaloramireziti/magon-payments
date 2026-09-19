@@ -38,7 +38,7 @@ Si el backend corre en el mismo dominio, omití `apiBaseUrl`.
 | `returnUrl` | `string` | página actual | A dónde vuelve GalioPay después de pagar |
 | `theme` | `MagonPayTheme` | — | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | — | Textos |
-| `logoSrc` | `string` | — | URL del logo (PNG/SVG). Si no se pasa, usa el logo Magon SVG incluido |
+| `logoSrc` | `string` | `https://magon.tech/assets/logos/logo.png` | URL del logo (PNG/SVG) |
 | `logo` | `ReactNode` | — | Logo propio (JSX/SVG), tiene prioridad sobre `logoSrc` |
 | `logoAlt` | `string` | `"Magon"` | Texto alternativo del logo |
 | `enforce` | `boolean` | `true` | `false` no bloquea (solo informa por `onStatusChange`) |
@@ -70,7 +70,7 @@ Lista las facturas pagas con un botón para descargar el comprobante PDF (lo gen
 
 ### Logo
 
-Por defecto usa un logo **Magon** SVG (blanco, pensado para fondo oscuro). Para usar tu archivo exacto:
+Por defecto se muestra `https://magon.tech/assets/logos/logo.png` (si la imagen falla, cae a un logo Magon SVG). Para usar tu archivo:
 
 ```tsx
 <MagonPayGate clientKey="magon_xxx" apiBaseUrl="https://pay.magon.com" logoSrc="/logo-magon.png">

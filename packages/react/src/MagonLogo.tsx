@@ -1,6 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+
+export const DEFAULT_LOGO_SRC = "https://magon.tech/assets/logos/logo.png";
 
 export type MagonLogoProps = {
   size?: number;
@@ -38,5 +40,35 @@ export function MagonLogo({
         <path d="M32 3.5 L32 60.5" strokeWidth={3.8} />
       </g>
     </svg>
+  );
+}
+
+export type MagonBrandMarkProps = {
+  logoSrc?: string;
+  logo?: ReactNode;
+  logoAlt?: string;
+  size?: number;
+  color?: string;
+};
+
+export function MagonBrandMark({
+  logoSrc,
+  logo,
+  logoAlt,
+  size = 72,
+  color = "#ffffff",
+}: MagonBrandMarkProps) {
+  const [failed, setFailed] = useState(false);
+
+  if (logo) return <>{logo}</>;
+  if (failed) return <MagonLogo size={size} color={color} />;
+
+  return (
+    <img
+      src={logoSrc ?? DEFAULT_LOGO_SRC}
+      alt={logoAlt ?? "Magon"}
+      onError={() => setFailed(true)}
+      style={{ height: size, width: "auto", maxWidth: "100%", objectFit: "contain" }}
+    />
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { MagonLogo } from "./MagonLogo";
+import { MagonBrandMark } from "./MagonLogo";
 import {
   DEFAULT_LABELS,
   DEFAULT_THEME,
@@ -67,16 +67,8 @@ export function PaymentBlockedScreen(props: PaymentBlockedScreenProps) {
   const t = { ...DEFAULT_THEME, ...theme };
   const l = { ...DEFAULT_LABELS, ...labels };
 
-  const logoNode = logo ?? (
-    logoSrc ? (
-      <img
-        src={logoSrc}
-        alt={logoAlt ?? "Magon"}
-        style={{ height: 64, width: "auto", maxWidth: "100%", objectFit: "contain" }}
-      />
-    ) : (
-      <MagonLogo size={72} color={t.text} />
-    )
+  const logoNode = (
+    <MagonBrandMark logoSrc={logoSrc} logo={logo} logoAlt={logoAlt} size={72} color={t.text} />
   );
 
   const styles: Record<string, CSSProperties> = {

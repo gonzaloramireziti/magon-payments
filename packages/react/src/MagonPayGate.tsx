@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useMagonSubscription } from "./useSubscription";
 import { PaymentBlockedScreen } from "./PaymentBlockedScreen";
-import { MagonLogo } from "./MagonLogo";
+import { MagonBrandMark } from "./MagonLogo";
 import {
   DEFAULT_LABELS,
   DEFAULT_THEME,
@@ -69,17 +69,9 @@ export function MagonPayGate(props: MagonPayGateProps) {
   const t = { ...DEFAULT_THEME, ...theme };
   const l = { ...DEFAULT_LABELS, ...labels };
 
-  const logoNode =
-    logo ??
-    (logoSrc ? (
-      <img
-        src={logoSrc}
-        alt={logoAlt ?? "Magon"}
-        style={{ height: 56, width: "auto", maxWidth: "100%", objectFit: "contain" }}
-      />
-    ) : (
-      <MagonLogo size={64} color={t.text} />
-    ));
+  const logoNode = (
+    <MagonBrandMark logoSrc={logoSrc} logo={logo} logoAlt={logoAlt} size={64} color={t.text} />
+  );
 
   if (!enforce) {
     return <>{children}</>;

@@ -230,7 +230,7 @@ Props principales:
 | `returnUrl` | `string` | A dónde vuelve GalioPay tras pagar. Por defecto, la página actual del cliente |
 | `theme` | `MagonPayTheme` | Colores, radio y tipografía (tema **oscuro** por defecto) |
 | `labels` | `Partial<MagonPayLabels>` | Textos (i18n) |
-| `logoSrc` | `string` | URL del logo; si no se pasa usa el `MagonLogo` SVG incluido |
+| `logoSrc` | `string` | URL del logo; por defecto `https://magon.tech/assets/logos/logo.png` |
 | `logo` | `ReactNode` | Logo propio (prioridad sobre `logoSrc`) |
 | `logoAlt` | `string` | Alt del logo (default `"Magon"`) |
 | `enforce` | `boolean` | `false` renderiza siempre `children` (default `true`) |

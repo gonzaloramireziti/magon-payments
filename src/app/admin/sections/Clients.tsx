@@ -437,7 +437,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
         <Textarea
           label="Contexto para prompts"
           description="Se agrega al prompt de cada ticket: proyecto, carpeta, repositorio, stack y agente."
-          placeholder={"Proyecto Carpoint, carpeta Carpoint/FrontCRM (React + MUI) y Carpoint/Back (.NET 8).\nAgente de Herdr: carpoint."}
+          placeholder={"Proyecto X: carpeta X/Front (React + MUI) y X/Back (.NET 8).\nAgente de Herdr: x."}
           autosize
           minRows={2}
           maxRows={6}

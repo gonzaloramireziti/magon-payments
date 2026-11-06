@@ -52,6 +52,17 @@ export const usdRateApi =
   process.env.USD_RATE_API ?? "https://dolarapi.com/v1/dolares/oficial";
 export const usdRateFallback = Number(process.env.USD_RATE_FALLBACK ?? 0);
 
+// Avisos a usuarios del panel. Cada canal se habilita solo si tiene sus variables.
+export const notify = {
+  panelUrl: process.env.PANEL_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? appUrl,
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  emailFrom: process.env.NOTIFY_EMAIL_FROM ?? "",
+  evolutionUrl: process.env.EVOLUTION_API_URL ?? "",
+  evolutionKey: process.env.EVOLUTION_API_KEY ?? "",
+  evolutionInstance: process.env.EVOLUTION_INSTANCE ?? "",
+  timeoutMs: Number(process.env.NOTIFY_TIMEOUT_MS ?? 6000),
+};
+
 export function supabaseConfig(): { url: string; serviceRoleKey: string } {
   return {
     url: required("SUPABASE_URL", process.env.SUPABASE_URL),

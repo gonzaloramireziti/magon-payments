@@ -39,11 +39,13 @@ import {
   IconAlertTriangle,
   IconArchive,
   IconBell,
+  IconSpeakerphone,
 } from "@tabler/icons-react";
 import { Brand } from "./Brand";
 import { Board, applyLocal, type TicketChanges } from "./board/Board";
 import { TicketDrawer } from "./board/TicketDrawer";
 import { Closed } from "./sections/Closed";
+import { MyAlerts } from "./sections/MyAlerts";
 import { diffSummaries, snapshot, titleWithCount, type Summary } from "./lib/watch";
 import {
   desktopEnabled,
@@ -92,6 +94,7 @@ export function AdminApp({ me }: { me: Me }) {
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [clientFocus, setClientFocus] = useState<string | null>(null);
   const [unseen, setUnseen] = useState<Summary[]>([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [desktopOn, setDesktopOn] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const lastSnapshot = useRef<Map<string, string> | null>(null);
@@ -99,6 +102,13 @@ export function AdminApp({ me }: { me: Me }) {
   const scheme = useComputedColorScheme("light");
 
   useEffect(() => {
+    // Los avisos traen /admin?ticket=<id>: abre ese ticket y limpia la URL.
+    const params = new URLSearchParams(window.location.search);
+    const linked = params.get("ticket");
+    if (linked) {
+      setOpenTicketId(linked);
+      window.history.replaceState(null, "", `${window.location.pathname}#tablero`);
+    }
     setSection(sectionFromHash());
     const onHash = () => setSection(sectionFromHash());
     window.addEventListener("hashchange", onHash);
@@ -413,6 +423,13 @@ export function AdminApp({ me }: { me: Me }) {
                   </Text>
                 </Menu.Label>
                 <Menu.Divider />
+                <Menu.Item
+                  leftSection={<IconSpeakerphone size={16} />}
+                  onClick={() => setAlertsOpen(true)}
+                  disabled={!me.id}
+                >
+                  Mis avisos (WhatsApp, Discord, correo)
+                </Menu.Item>
                 <Menu.Item leftSection={<IconLogout size={16} />} onClick={logout}>
                   Cerrar sesión
                 </Menu.Item>
@@ -446,6 +463,8 @@ export function AdminApp({ me }: { me: Me }) {
           </Text>
         )}
       </AppShell.Navbar>
+
+      <MyAlerts opened={alertsOpen} onClose={() => setAlertsOpen(false)} />
 
       <AppShell.Main>
         {me.emergency && (

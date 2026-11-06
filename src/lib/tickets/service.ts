@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { findClientByKey } from "@/lib/subscription/service";
 import type { AdminSession } from "@/lib/admin/auth";
+import { notifyEvent } from "@/lib/notify/service";
 import {
   allowedTypes,
   isTicketStatus,
@@ -164,7 +165,15 @@ export async function createTicket(
     .select("id,number")
     .single();
   if (error) throw error;
-  return { id: data.id as string, number: Number(data.number) };
+  const created = { id: data.id as string, number: Number(data.number) };
+  await notifyEvent("new_ticket", {
+    ...created,
+    title: input.title,
+    type: input.type,
+    urgency: input.urgency,
+    client_name: client.name,
+  });
+  return created;
 }
 
 export type PublicTicket = {
@@ -276,6 +285,27 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
   );
 }
 
+async function ticketForMessage(id: string) {
+  const { data } = await getSupabaseAdmin()
+    .from("tickets")
+    .select("id,number,title,type,urgency,assignee_id,clients(name)")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const clients = data.clients as unknown as { name: string } | null;
+  return {
+    ticket: {
+      id: data.id as string,
+      number: Number(data.number),
+      title: data.title as string,
+      type: data.type as TicketType,
+      urgency: data.urgency as string,
+      client_name: clients?.name ?? "-",
+    },
+    assigneeId: (data.assignee_id as string | null) ?? null,
+  };
+}
+
 type ActivityKind = "comment" | "status" | "assignee" | "urgency" | "labels";
 
 async function recordActivity(
@@ -373,6 +403,11 @@ export async function updateTicket(
     .single();
   if (error) throw error;
   for (const event of events) await recordActivity(id, actor, event.kind, null, event.meta);
+  const newAssignee = update.assignee_id as string | null | undefined;
+  if (newAssignee && newAssignee !== current.assignee_id && newAssignee !== actor.userId) {
+    const info = await ticketForMessage(id);
+    if (info) await notifyEvent("assigned", info.ticket, { onlyUserId: newAssignee, actorName: actor.name });
+  }
   return data as TicketRow;
 }
 
@@ -417,4 +452,8 @@ export async function addComment(ticketId: string, raw: unknown, actor: AdminSes
     body,
   });
   if (insertError) throw insertError;
+  const info = await ticketForMessage(ticketId);
+  if (info?.assigneeId && info.assigneeId !== actor.userId) {
+    await notifyEvent("comment", info.ticket, { onlyUserId: info.assigneeId, actorName: actor.name, comment: body });
+  }
 }

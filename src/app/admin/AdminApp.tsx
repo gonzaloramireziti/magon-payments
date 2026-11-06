@@ -40,12 +40,14 @@ import {
   IconArchive,
   IconBell,
   IconSpeakerphone,
+  IconBook,
 } from "@tabler/icons-react";
 import { Brand } from "./Brand";
 import { Board, applyLocal, type TicketChanges } from "./board/Board";
 import { TicketDrawer } from "./board/TicketDrawer";
 import { Closed } from "./sections/Closed";
 import { MyAlerts } from "./sections/MyAlerts";
+import { DocsSection } from "./sections/Docs";
 import { diffSummaries, snapshot, titleWithCount, type Summary } from "./lib/watch";
 import {
   desktopEnabled,
@@ -73,6 +75,7 @@ const SECTIONS = [
   { id: "clientes", label: "Clientes", icon: IconBuildingStore },
   { id: "cobros", label: "Cobros", icon: IconCash },
   { id: "costos", label: "Costos", icon: IconReceipt2 },
+  { id: "documentacion", label: "Documentación", icon: IconBook },
   { id: "usuarios", label: "Usuarios", icon: IconUsers },
 ] as const;
 
@@ -500,6 +503,7 @@ export function AdminApp({ me }: { me: Me }) {
         )}
         {section === "cobros" && <Payments />}
         {section === "costos" && <Costs />}
+        {section === "documentacion" && <DocsSection me={me} />}
         {section === "usuarios" && <Users me={me} users={users} reload={loadUsers} />}
 
         <TicketDrawer

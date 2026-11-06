@@ -63,6 +63,9 @@ export const notify = {
   timeoutMs: Number(process.env.NOTIFY_TIMEOUT_MS ?? 6000),
 };
 
+// Clave de la bóveda de credenciales (32 bytes en base64). Nunca va al repo ni al navegador.
+export const vaultKeyRaw = process.env.VAULT_KEY ?? "";
+
 export function supabaseConfig(): { url: string; serviceRoleKey: string } {
   return {
     url: required("SUPABASE_URL", process.env.SUPABASE_URL),

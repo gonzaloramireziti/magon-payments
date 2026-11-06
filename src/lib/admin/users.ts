@@ -177,3 +177,14 @@ export async function acceptInvite(token: string, password: string): Promise<Adm
   if (error) throw error;
   return toUser(data as AdminUserRow);
 }
+
+// Para acciones sensibles (desbloquear la bóveda): vuelve a pedir la contraseña.
+export async function verifyUserPassword(id: string, password: string): Promise<boolean> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("admin_users")
+    .select("password_hash,active")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.active) && verifyPassword(password, (data?.password_hash as string | null) ?? null);
+}

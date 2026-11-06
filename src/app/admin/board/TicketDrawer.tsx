@@ -7,15 +7,18 @@ import {
   Badge,
   Box,
   Button,
+  CopyButton,
   Divider,
   Drawer,
   Group,
   Image,
+  Modal,
   Paper,
   ScrollArea,
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Tabs,
   TagsInput,
   Text,
@@ -27,7 +30,10 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import {
   IconArrowRight,
+  IconCheck,
+  IconCopy,
   IconExternalLink,
+  IconSparkles,
   IconFlag,
   IconHandGrab,
   IconHandOff,
@@ -51,6 +57,7 @@ import {
   type TicketUrgency,
 } from "../lib/tickets";
 import type { TicketChanges } from "./Board";
+import { buildTicketPrompt } from "./prompt";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -122,6 +129,7 @@ export function TicketDrawer({
   me,
   users,
   labelOptions,
+  clientContext,
   onClose,
   onChange,
 }: {
@@ -129,6 +137,7 @@ export function TicketDrawer({
   me: Me;
   users: PanelUser[];
   labelOptions: string[];
+  clientContext: string | null;
   onClose: () => void;
   onChange: (id: string, changes: TicketChanges) => Promise<void>;
 }) {
@@ -137,6 +146,9 @@ export function TicketDrawer({
   const [activity, setActivity] = useState<Activity[] | null>(null);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [includeComments, setIncludeComments] = useState(true);
+  const [prompt, setPrompt] = useState("");
   const ticketId = ticket?.id ?? null;
 
   const loadActivity = useCallback(async () => {
@@ -153,6 +165,7 @@ export function TicketDrawer({
     setActivity(null);
     setComment("");
     setTab("detalle");
+    setPromptOpen(false);
     void loadActivity();
   }, [loadActivity]);
 
@@ -191,6 +204,13 @@ export function TicketDrawer({
     .join(" · ");
   const comments = activity?.filter((item) => item.kind === "comment").length ?? 0;
 
+  function openPrompt(withComments = includeComments) {
+    setPrompt(
+      buildTicketPrompt(ticket!, { clientContext, comments: activity ?? [], includeComments: withComments })
+    );
+    setPromptOpen(true);
+  }
+
   return (
     <Drawer
       opened
@@ -215,10 +235,65 @@ export function TicketDrawer({
         <Title order={2} mb={4} style={{ wordBreak: "break-word" }}>
           {ticket.title}
         </Title>
-        <Text size="xs" c="dimmed" mb="md">
-          Cargado {relative(ticket.created_at)} ({dateTime(ticket.created_at)})
-          {ticket.resolved_at ? ` · cerrado ${relative(ticket.resolved_at)}` : ""}
-        </Text>
+        <Group justify="space-between" mb="md" gap="xs">
+          <Text size="xs" c="dimmed">
+            Cargado {relative(ticket.created_at)} ({dateTime(ticket.created_at)})
+            {ticket.resolved_at ? ` · cerrado ${relative(ticket.resolved_at)}` : ""}
+          </Text>
+          <Button
+            size="xs"
+            variant="light"
+            leftSection={<IconSparkles size={14} />}
+            onClick={() => openPrompt()}
+            loading={activity === null}
+          >
+            Generar prompt
+          </Button>
+        </Group>
+
+        <Modal opened={promptOpen} onClose={() => setPromptOpen(false)} title={`Prompt para el ticket #${ticket.number}`} size="xl">
+          <Stack gap="sm">
+            {!clientContext && (
+              <Text size="xs" c="yellow.8">
+                {ticket.client_name} no tiene contexto técnico cargado. Agregalo en Clientes → Editar → «Contexto para
+                prompts» (proyecto, carpeta, stack, agente) y el prompt lo va a incluir.
+              </Text>
+            )}
+            <Switch
+              size="xs"
+              label="Incluir los comentarios internos del equipo"
+              checked={includeComments}
+              onChange={(event) => {
+                setIncludeComments(event.currentTarget.checked);
+                openPrompt(event.currentTarget.checked);
+              }}
+            />
+            <Textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.currentTarget.value)}
+              autosize
+              minRows={12}
+              maxRows={22}
+              styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)", fontSize: 12 } }}
+            />
+            <Group justify="space-between">
+              <Text size="xs" c="dimmed">
+                Lo podés editar antes de copiarlo. Las capturas van como links que vencen en 1 hora.
+              </Text>
+              <CopyButton value={prompt}>
+                {({ copied, copy }) => (
+                  <Button
+                    onClick={copy}
+                    color={copied ? "teal" : undefined}
+                    leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                  >
+                    {copied ? "Copiado" : "Copiar prompt"}
+                  </Button>
+                )}
+              </CopyButton>
+            </Group>
+          </Stack>
+        </Modal>
 
         <Paper p="sm" mb="md" bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))">
           <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="sm">

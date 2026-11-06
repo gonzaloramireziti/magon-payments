@@ -69,7 +69,7 @@ export function AdminApp({ me }: { me: Me }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketsState, setTicketsState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [users, setUsers] = useState<PanelUser[]>([]);
-  const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
+  const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null }>>([]);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [clientFocus, setClientFocus] = useState<string | null>(null);
   const { setColorScheme } = useMantineColorScheme();
@@ -119,7 +119,7 @@ export function AdminApp({ me }: { me: Me }) {
   useEffect(() => {
     void loadTickets();
     void loadUsers();
-    api<{ clients: Array<{ id: string; name: string }> }>("/api/admin/clients")
+    api<{ clients: Array<{ id: string; name: string; notes: string | null }> }>("/api/admin/clients")
       .then((data) => setClients(data.clients))
       .catch(() => setClients([]));
     // El tablero se refresca solo cada minuto para ver lo que carga otro.
@@ -128,6 +128,11 @@ export function AdminApp({ me }: { me: Me }) {
   }, [loadTickets, loadUsers]);
 
   useHotkeys([["mod+K", () => spotlight.open()]]);
+
+  const clientContexts = useMemo(
+    () => Object.fromEntries(clients.map((c) => [c.id, c.notes ?? null])) as Record<string, string | null>,
+    [clients]
+  );
 
   const newCount = tickets.filter((t) => t.status === "new").length;
   const mineCount = tickets.filter((t) => me.id && t.assignee_id === me.id && !isClosed(t.status)).length;
@@ -304,6 +309,7 @@ export function AdminApp({ me }: { me: Me }) {
             reload={loadTickets}
             openTicketId={openTicketId}
             setOpenTicketId={setOpenTicketId}
+            clientContexts={clientContexts}
           />
         )}
         {section === "resumen" && <Overview onOpenBoard={() => go("tablero")} />}

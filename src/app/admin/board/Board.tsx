@@ -120,6 +120,7 @@ export function Board({
   reload,
   openTicketId,
   setOpenTicketId,
+  clientContexts,
 }: {
   me: Me;
   tickets: Ticket[];
@@ -129,6 +130,7 @@ export function Board({
   reload: () => Promise<void>;
   openTicketId: string | null;
   setOpenTicketId: (id: string | null) => void;
+  clientContexts: Record<string, string | null>;
 }) {
   const mobile = useMediaQuery("(max-width: 48em)");
   const [filters, setFiltersState] = useState<BoardFilters>(EMPTY_FILTERS);
@@ -485,6 +487,7 @@ export function Board({
         me={me}
         users={users}
         labelOptions={labels}
+        clientContext={opened ? clientContexts[opened.client_id] ?? null : null}
         onClose={() => setOpenTicketId(null)}
         onChange={patch}
       />

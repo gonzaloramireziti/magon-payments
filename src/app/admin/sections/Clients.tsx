@@ -20,6 +20,7 @@ import {
   Switch,
   Table,
   Text,
+  Textarea,
   TextInput,
   Title,
   Tooltip,
@@ -52,6 +53,7 @@ type Client = {
   currency: string;
   active: boolean;
   start_period: string | null;
+  notes: string | null;
   support_policy?: Record<string, string[]> | null;
   status: Status | null;
 };
@@ -346,6 +348,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
     startPeriod: client?.start_period ?? "",
     active: client?.active ?? true,
     clientKey: "",
+    notes: client?.notes ?? "",
   });
   const [preset, setPreset] = useState(
     POLICY_PRESETS.find((p) => samePolicy(p.policy, initialPolicy))?.value ?? "custom"
@@ -369,6 +372,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             currency: form.currency,
             startPeriod: form.startPeriod || null,
             active: form.active,
+            notes: form.notes.trim() || null,
             ...(policy && !samePolicy(policy, initialPolicy) ? { supportPolicy: policy } : {}),
           },
         });
@@ -384,6 +388,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             currency: form.currency,
             startPeriod: form.startPeriod || null,
             clientKey: form.clientKey || undefined,
+            notes: form.notes.trim() || null,
           },
         });
         notifyOk(`Cliente creado. KEY: ${data.client.client_key}`);
@@ -429,6 +434,16 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             <SegmentedControl value={form.currency} onChange={(v) => set({ currency: v })} data={["ARS", "USD"]} />
           </Stack>
         </SimpleGrid>
+        <Textarea
+          label="Contexto para prompts"
+          description="Se agrega al prompt de cada ticket: proyecto, carpeta, repositorio, stack y agente."
+          placeholder={"Proyecto Carpoint, carpeta Carpoint/FrontCRM (React + MUI) y Carpoint/Back (.NET 8).\nAgente de Herdr: carpoint."}
+          autosize
+          minRows={2}
+          maxRows={6}
+          value={form.notes}
+          onChange={(e) => set({ notes: e.currentTarget.value })}
+        />
         {client ? (
           <>
             <Select

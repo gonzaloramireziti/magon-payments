@@ -12,11 +12,11 @@ type Cost = {
   notes: string | null;
 };
 
-export function AdminCosts({ onChanged }: { onChanged: () => void }) {
+export function AdminCosts({ onChanged, defaultOpen = false }: { onChanged: () => void; defaultOpen?: boolean }) {
   const [costs, setCosts] = useState<Cost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", amount: "", currency: "ARS" });
   const [saving, setSaving] = useState(false);
@@ -124,7 +124,7 @@ export function AdminCosts({ onChanged }: { onChanged: () => void }) {
         onSubmit={create}
         style={{
           display: "grid",
-          gridTemplateColumns: "2fr 1fr 1fr auto",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
           gap: 12,
           alignItems: "end",
           marginBottom: 14,

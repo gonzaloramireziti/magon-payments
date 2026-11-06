@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isAdminRequest } from "@/lib/admin/auth";
 import { getSubscriptionStatus } from "@/lib/subscription/service";
+import { parsePolicy } from "@/lib/tickets/policy";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,7 @@ export async function PATCH(request: NextRequest) {
     update.client_key = body.clientKey.trim();
   }
   if (body.rotateKey === true) update.client_key = generateClientKey();
+  if (body.supportPolicy !== undefined) update.support_policy = parsePolicy(body.supportPolicy);
 
   if (Object.keys(update).length === 0) {
     return errorJson("Nada para actualizar", 400, "EMPTY_UPDATE");

@@ -2,9 +2,26 @@ import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isAdminRequest } from "@/lib/admin/auth";
 import { allocatePaymentToInvoices, markInvoicesPaid } from "@/lib/subscription/allocation";
+import { listPayments } from "@/lib/admin/payments";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(request: NextRequest) {
+  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const params = new URL(request.url).searchParams;
+  try {
+    const payments = await listPayments({
+      month: params.get("month"),
+      clientId: params.get("clientId"),
+      status: params.get("status"),
+    });
+    return okJson({ payments });
+  } catch (error) {
+    console.error("[api/admin/payments]", error);
+    return errorJson("No se pudieron leer los pagos", 500, "PAYMENTS_ERROR");
+  }
+}
 
 export async function POST(request: NextRequest) {
   if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");

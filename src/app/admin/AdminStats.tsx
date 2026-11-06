@@ -78,7 +78,7 @@ export function AdminStats({ reloadKey }: { reloadKey: number }) {
           marginBottom: 14,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 16 }}>Resumen mensual</h2>
+        <h2 style={{ margin: 0, fontSize: 16 }}>Rentabilidad mensual</h2>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button style={ghost} onClick={toggleCurrency}>
             {showArs ? "Ver en USD" : "Ver en ARS"}

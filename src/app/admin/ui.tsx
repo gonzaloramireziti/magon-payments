@@ -115,3 +115,83 @@ export function Card({
     </div>
   );
 }
+
+export function stateBadge(state: string): { label: string; color: string } {
+  switch (state) {
+    case "active":
+      return { label: "Al día", color: COLORS.ok };
+    case "due":
+      return { label: "Por vencer", color: COLORS.warn };
+    case "blocked":
+      return { label: "Vencido", color: COLORS.danger };
+    case "inactive":
+      return { label: "Inactivo", color: COLORS.muted };
+    default:
+      return { label: "Sin datos", color: COLORS.muted };
+  }
+}
+
+export function whatsappReminderUrl(
+  name: string,
+  phone: string | null,
+  amount: number,
+  currency: string,
+  periodLabel: string
+): string {
+  const text =
+    `¡Hola ${name}! 👋 Somos el equipo de Magon. ` +
+    `Te escribimos para recordarte que tu suscripción de ${periodLabel} está lista para abonar: ${money(amount, currency)}. ` +
+    `Tenés tiempo hasta el 10 para hacerlo, sin apuro. ` +
+    `¡Cualquier duda quedamos a disposición! Gracias por confiar en nosotros 🙌`;
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
+export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { cache: "no-store", ...init });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw Object.assign(new Error(data.error ?? `HTTP ${response.status}`), { code: data.code ?? null });
+  }
+  return data as T;
+}
+
+export function Section({
+  title,
+  subtitle,
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section style={{ marginBottom: 26 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 14,
+        }}
+      >
+        <div>
+          <h2 style={{ margin: 0, fontSize: 16 }}>{title}</h2>
+          {subtitle && <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>{subtitle}</div>}
+        </div>
+        {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export const panel: CSSProperties = {
+  background: COLORS.surface,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 14,
+};

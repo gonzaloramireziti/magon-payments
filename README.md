@@ -43,6 +43,10 @@ npm run dev                  # http://localhost:3000
 > Si ya tenías la base creada antes del cambio de ciclo de facturación, ejecutá también
 > `supabase/migrations/001_billing_cycle.sql` (agrega `start_period` y hace el backfill).
 
+> Para la ticketera (tablero del panel y `<MagonSupport>`), ejecutá
+> `supabase/migrations/003_tickets.sql`: crea la tabla `tickets`, la columna
+> `clients.support_policy` y el bucket privado `ticket-attachments`.
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno

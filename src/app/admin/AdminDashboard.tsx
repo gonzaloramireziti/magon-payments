@@ -1,199 +1,89 @@
 "use client";
 
-import {
-  Fragment,
-  useCallback,
-  useEffect,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import { AdminStats } from "./AdminStats";
+import { useCallback, useEffect, useState } from "react";
+import { AdminOverview } from "./AdminOverview";
+import { AdminClients } from "./AdminClients";
+import { AdminPayments } from "./AdminPayments";
 import { AdminCosts } from "./AdminCosts";
+import { AdminBoard } from "./AdminBoard";
+import { COLORS, banner, ghost } from "./ui";
 
-type Invoice = {
-  id: string;
-  period: string;
-  amount: number;
-  currency: string;
-  dueDate: string;
-  status: string;
-};
+const SECTIONS = [
+  { id: "inicio", label: "Inicio" },
+  { id: "clientes", label: "Clientes" },
+  { id: "cobros", label: "Cobros" },
+  { id: "costos", label: "Costos" },
+  { id: "tablero", label: "Tablero" },
+] as const;
 
-type Status = {
-  found: boolean;
-  blocked: boolean;
-  state: string;
-  amountDue: number;
-  currency: string;
-  periodLabel: string;
-  dueDate: string;
-  daysUntilDue: number;
-  invoices: Invoice[];
-};
+type SectionId = (typeof SECTIONS)[number]["id"];
 
-type AdminClient = {
-  id: string;
-  client_key: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  monthly_amount: number | string;
-  currency: string;
-  active: boolean;
-  notes: string | null;
-  start_period: string | null;
-  created_at: string;
-  status: Status | null;
-};
-
-const COLORS = {
-  bg: "#08080b",
-  surface: "#121216",
-  border: "#27272a",
-  text: "#f4f4f5",
-  muted: "#a1a1aa",
-  danger: "#f87171",
-  ok: "#4ade80",
-  warn: "#facc15",
-};
-
-const input: CSSProperties = {
-  width: "100%",
-  padding: "9px 10px",
-  borderRadius: 8,
-  border: `1px solid ${COLORS.border}`,
-  background: COLORS.bg,
-  color: COLORS.text,
-  fontSize: 13,
-  boxSizing: "border-box",
-};
-
-const button: CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 9,
-  border: "none",
-  background: "#ffffff",
-  color: "#0a0a0a",
-  fontWeight: 700,
-  fontSize: 13,
-  cursor: "pointer",
-};
-
-const ghost: CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 9,
-  border: `1px solid ${COLORS.border}`,
-  background: "transparent",
-  color: COLORS.text,
-  fontWeight: 600,
-  fontSize: 12,
-  cursor: "pointer",
-};
-
-function money(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("es-AR", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${currency} ${amount.toFixed(2)}`;
-  }
+function sectionFromHash(): SectionId {
+  if (typeof window === "undefined") return "inicio";
+  const hash = window.location.hash.replace("#", "");
+  return SECTIONS.some((section) => section.id === hash) ? (hash as SectionId) : "inicio";
 }
 
-function shortDate(value: string): string {
-  const [y, m, d] = value.slice(0, 10).split("-");
-  return y && m && d ? `${d}/${m}/${y}` : value;
+// Layout responsive: los estilos en línea no admiten media queries.
+const LAYOUT_CSS = `
+.mg-shell { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; max-width: 1500px; margin: 0 auto; }
+.mg-nav { position: sticky; top: 24px; align-self: start; display: grid; gap: 4px; }
+.mg-nav button { text-align: left; }
+.mg-two-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 0 20px; }
+.mg-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 860px) {
+  .mg-shell { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .mg-nav { position: static; display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .mg-nav button { white-space: nowrap; }
+  .mg-two-cols { grid-template-columns: minmax(0, 1fr); }
+  .mg-table thead { display: none; }
+  .mg-table tr { display: block; padding: 8px 0; }
+  .mg-table td { display: flex; justify-content: space-between; gap: 12px; padding: 6px 14px !important; text-align: right; }
+  .mg-table td[data-label]::before { content: attr(data-label); color: ${COLORS.muted}; font-size: 11px; text-transform: uppercase; text-align: left; }
+  .mg-table td.mg-actions { justify-content: flex-start; flex-wrap: wrap; gap: 6px; white-space: normal !important; }
+  .mg-table td.mg-actions > * { margin-left: 0 !important; }
+  .mg-table tr.mg-detail td { display: block; text-align: left; }
 }
-
-function stateBadge(state: string): { label: string; color: string } {
-  switch (state) {
-    case "active":
-      return { label: "Al día", color: COLORS.ok };
-    case "due":
-      return { label: "Por vencer", color: COLORS.warn };
-    case "blocked":
-      return { label: "Vencido", color: COLORS.danger };
-    case "inactive":
-      return { label: "Inactivo", color: COLORS.muted };
-    default:
-      return { label: "Sin datos", color: COLORS.muted };
-  }
-}
-
-function whatsappUrl(client: AdminClient): string {
-  const amount = client.status?.amountDue ?? 0;
-  const period = client.status?.periodLabel ?? "";
-  const monto = money(amount, client.currency);
-  const text =
-    `¡Hola ${client.name}! 👋 Somos el equipo de Magon. ` +
-    `Te escribimos para recordarte que tu suscripción de ${period} está lista para abonar: ${monto}. ` +
-    `Tenés tiempo hasta el 10 para hacerlo, sin apuro. ` +
-    `¡Cualquier duda quedamos a disposición! Gracias por confiar en nosotros 🙌`;
-  const digits = (client.phone ?? "").replace(/\D/g, "");
-  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
-}
+`;
 
 export function AdminDashboard() {
-  const [clients, setClients] = useState<AdminClient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [section, setSection] = useState<SectionId>("inicio");
   const [message, setMessage] = useState<string | null>(null);
-  const [showNew, setShowNew] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [payingId, setPayingId] = useState<string | null>(null);
-  const [dashboardKey, setDashboardKey] = useState(0);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/admin/clients?withStatus=1", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
-      setClients(data.clients as AdminClient[]);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    setSection(sectionFromHash());
+    const onHash = () => {
+      setSection(sectionFromHash());
+      setMessage(null);
+      setError(null);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const go = useCallback((id: SectionId) => {
+    window.location.hash = id;
+    setSection(id);
+    setMessage(null);
+    setError(null);
+  }, []);
+
+  const showMessage = useCallback((text: string) => {
+    setError(null);
+    setMessage(text);
+  }, []);
+  const showError = useCallback((text: string) => {
+    setMessage(null);
+    setError(text);
+  }, []);
+  const changed = useCallback(() => setReloadKey((key) => key + 1), []);
 
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     window.location.reload();
   }
-
-  async function remove(client: AdminClient) {
-    const confirmed = window.confirm(
-      `¿Borrar a "${client.name}"? Se eliminan también sus facturas y pagos asociados.`
-    );
-    if (!confirmed) return;
-    try {
-      const response = await fetch(
-        `/api/admin/clients?id=${encodeURIComponent(client.id)}`,
-        { method: "DELETE" }
-      );
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error ?? "Error");
-      setMessage(`Cliente "${client.name}" eliminado`);
-      setEditingId(null);
-      setPayingId(null);
-      setDashboardKey((key) => key + 1);
-      void load();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  const totalDebt = clients.reduce((acc, client) => acc + (client.status?.amountDue ?? 0), 0);
 
   return (
     <main
@@ -202,507 +92,54 @@ export function AdminDashboard() {
         background: COLORS.bg,
         color: COLORS.text,
         fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-        padding: "28px 24px 60px",
+        padding: "24px 16px 60px",
       }}
     >
-      <div style={{ maxWidth: 1400, margin: "0 auto" }}>
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            marginBottom: 22,
-          }}
-        >
-          <div>
-            <h1 style={{ margin: 0, fontSize: 22 }}>Administración Magon</h1>
-            <p style={{ margin: "4px 0 0", color: COLORS.muted, fontSize: 13 }}>
-              {clients.length} clientes · deuda total {money(totalDebt, "ARS")}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={button} onClick={() => setShowNew((value) => !value)}>
-              {showNew ? "Cerrar" : "+ Nuevo cliente"}
+      <style>{LAYOUT_CSS}</style>
+      <div className="mg-shell">
+        <nav className="mg-nav" aria-label="Secciones">
+          <div style={{ fontWeight: 800, fontSize: 17, padding: "4px 12px 14px" }}>Magon</div>
+          {SECTIONS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => go(item.id)}
+              aria-current={section === item.id ? "page" : undefined}
+              style={{
+                ...ghost,
+                border: "1px solid transparent",
+                background: section === item.id ? COLORS.surface : "transparent",
+                borderColor: section === item.id ? COLORS.border : "transparent",
+                color: section === item.id ? COLORS.text : COLORS.muted,
+                fontSize: 13,
+                padding: "9px 12px",
+              }}
+            >
+              {item.label}
             </button>
-            <button style={ghost} onClick={logout}>
-              Salir
-            </button>
-          </div>
-        </header>
+          ))}
+          <button type="button" style={{ ...ghost, marginTop: 12, color: COLORS.muted }} onClick={logout}>
+            Salir
+          </button>
+        </nav>
 
-        {message && (
-          <div style={{ ...banner, color: COLORS.ok, borderColor: `${COLORS.ok}55` }}>{message}</div>
-        )}
-        {error && (
-          <div style={{ ...banner, color: COLORS.danger, borderColor: `${COLORS.danger}55` }}>
-            {error}
-          </div>
-        )}
+        <div style={{ minWidth: 0 }}>
+          {message && (
+            <div style={{ ...banner, color: COLORS.ok, borderColor: `${COLORS.ok}55` }}>{message}</div>
+          )}
+          {error && (
+            <div style={{ ...banner, color: COLORS.danger, borderColor: `${COLORS.danger}55` }}>{error}</div>
+          )}
 
-        {showNew && (
-          <NewClientForm
-            onCreated={(text) => {
-              setMessage(text);
-              setShowNew(false);
-              setDashboardKey((key) => key + 1);
-              void load();
-            }}
-            onError={setError}
-          />
-        )}
-
-        <AdminStats reloadKey={dashboardKey} />
-        <AdminCosts onChanged={() => setDashboardKey((key) => key + 1)} />
-
-        <div
-          style={{
-            background: COLORS.surface,
-            border: `1px solid ${COLORS.border}`,
-            borderRadius: 14,
-            overflowX: "auto",
-          }}
-        >
-          <table style={{ width: "100%", minWidth: 1080, borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: COLORS.muted, fontSize: 11, textTransform: "uppercase" }}>
-                <th style={th}>Cliente</th>
-                <th style={th}>KEY</th>
-                <th style={th}>Monto</th>
-                <th style={th}>Período</th>
-                <th style={th}>Vence</th>
-                <th style={th}>Deuda</th>
-                <th style={th}>Estado</th>
-                <th style={th} />
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td style={td} colSpan={8}>
-                    Cargando...
-                  </td>
-                </tr>
-              )}
-              {!loading && clients.length === 0 && (
-                <tr>
-                  <td style={td} colSpan={8}>
-                    No hay clientes todavía.
-                  </td>
-                </tr>
-              )}
-              {clients.map((client) => {
-                const status = client.status;
-                const badge = stateBadge(status?.state ?? "not_found");
-                return (
-                  <Fragment key={client.id}>
-                    <tr style={{ borderTop: `1px solid ${COLORS.border}` }}>
-                      <td style={td}>
-                        <div style={{ fontWeight: 600 }}>{client.name}</div>
-                        <div style={{ color: COLORS.muted, fontSize: 12 }}>{client.email ?? "-"}</div>
-                      </td>
-                      <td style={td}>
-                        <code style={{ fontSize: 11 }}>{client.client_key}</code>
-                      </td>
-                      <td style={td}>{money(Number(client.monthly_amount), client.currency)}</td>
-                      <td style={td}>{status?.periodLabel ?? "-"}</td>
-                      <td style={td}>{status ? shortDate(status.dueDate) : "-"}</td>
-                      <td style={{ ...td, fontWeight: 700, color: (status?.amountDue ?? 0) > 0 ? COLORS.danger : COLORS.ok }}>
-                        {money(status?.amountDue ?? 0, client.currency)}
-                      </td>
-                      <td style={td}>
-                        <span style={{ color: badge.color, fontWeight: 700 }}>● {badge.label}</span>
-                      </td>
-                      <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                        <button
-                          style={ghost}
-                          onClick={() => {
-                            setEditingId(editingId === client.id ? null : client.id);
-                            setPayingId(null);
-                          }}
-                        >
-                          Editar
-                        </button>{" "}
-                        <button
-                          style={{ ...ghost, marginLeft: 6 }}
-                          onClick={() => {
-                            setPayingId(payingId === client.id ? null : client.id);
-                            setEditingId(null);
-                          }}
-                        >
-                          Confirmar pago
-                        </button>{" "}
-                        <a
-                          href={whatsappUrl(client)}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={{
-                            ...ghost,
-                            marginLeft: 6,
-                            display: "inline-block",
-                            textDecoration: "none",
-                            color: COLORS.ok,
-                            borderColor: `${COLORS.ok}66`,
-                          }}
-                        >
-                          WhatsApp
-                        </a>{" "}
-                        <button
-                          style={{
-                            ...ghost,
-                            marginLeft: 6,
-                            color: COLORS.danger,
-                            borderColor: `${COLORS.danger}66`,
-                          }}
-                          onClick={() => remove(client)}
-                        >
-                          Borrar
-                        </button>
-                      </td>
-                    </tr>
-
-                    {editingId === client.id && (
-                      <tr>
-                        <td colSpan={8} style={{ background: "#0e0e12", padding: 16 }}>
-                          <EditClientForm
-                            client={client}
-                            onSaved={(text) => {
-                              setMessage(text);
-                              setEditingId(null);
-                              setDashboardKey((key) => key + 1);
-                              void load();
-                            }}
-                            onError={setError}
-                          />
-                        </td>
-                      </tr>
-                    )}
-
-                    {payingId === client.id && (
-                      <tr>
-                        <td colSpan={8} style={{ background: "#0e0e12", padding: 16 }}>
-                          <ManualPaymentForm
-                            client={client}
-                            onPaid={(text) => {
-                              setMessage(text);
-                              setPayingId(null);
-                              setDashboardKey((key) => key + 1);
-                              void load();
-                            }}
-                            onError={setError}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+          {section === "inicio" && <AdminOverview reloadKey={reloadKey} onOpenBoard={() => go("tablero")} />}
+          {section === "clientes" && (
+            <AdminClients onChanged={changed} onMessage={showMessage} onError={showError} />
+          )}
+          {section === "cobros" && <AdminPayments reloadKey={reloadKey} />}
+          {section === "costos" && <AdminCosts onChanged={changed} defaultOpen />}
+          {section === "tablero" && <AdminBoard onError={showError} />}
         </div>
       </div>
     </main>
-  );
-}
-
-const banner: CSSProperties = {
-  border: "1px solid",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontSize: 13,
-  marginBottom: 14,
-};
-
-const th: CSSProperties = { padding: "12px 14px", fontWeight: 700 };
-const td: CSSProperties = { padding: "12px 14px", verticalAlign: "middle" };
-
-function NewClientForm({
-  onCreated,
-  onError,
-}: {
-  onCreated: (message: string) => void;
-  onError: (message: string) => void;
-}) {
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    monthlyAmount: "15000",
-    currency: "ARS",
-    startPeriod: "",
-    clientKey: "",
-  });
-  const [saving, setSaving] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    try {
-      const response = await fetch("/api/admin/clients", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: form.name,
-          email: form.email || null,
-          phone: form.phone || null,
-          monthlyAmount: Number(form.monthlyAmount),
-          currency: form.currency,
-          startPeriod: form.startPeriod || null,
-          clientKey: form.clientKey || undefined,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error ?? "Error");
-      onCreated(`Cliente creado. KEY: ${data.client.client_key}`);
-    } catch (err) {
-      onError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={submit}
-      style={{
-        background: COLORS.surface,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 14,
-        padding: 18,
-        marginBottom: 18,
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-        gap: 12,
-        alignItems: "end",
-      }}
-    >
-      <Field label="Nombre">
-        <input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-      </Field>
-      <Field label="Email">
-        <input style={input} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      </Field>
-      <Field label="WhatsApp">
-        <input style={input} placeholder="5491122334455" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      </Field>
-      <Field label="Monto mensual">
-        <input style={input} type="number" value={form.monthlyAmount} onChange={(e) => setForm({ ...form, monthlyAmount: e.target.value })} />
-      </Field>
-      <Field label="Moneda">
-        <input style={input} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
-      </Field>
-      <Field label="Primer período (YYYY-MM)">
-        <input style={input} placeholder="2026-09" value={form.startPeriod} onChange={(e) => setForm({ ...form, startPeriod: e.target.value })} />
-      </Field>
-      <Field label="KEY (opcional)">
-        <input style={input} value={form.clientKey} onChange={(e) => setForm({ ...form, clientKey: e.target.value })} />
-      </Field>
-      <button style={button} type="submit" disabled={saving}>
-        {saving ? "Guardando..." : "Crear cliente"}
-      </button>
-    </form>
-  );
-}
-
-function EditClientForm({
-  client,
-  onSaved,
-  onError,
-}: {
-  client: AdminClient;
-  onSaved: (message: string) => void;
-  onError: (message: string) => void;
-}) {
-  const [form, setForm] = useState({
-    name: client.name,
-    email: client.email ?? "",
-    phone: client.phone ?? "",
-    monthlyAmount: String(client.monthly_amount),
-    currency: client.currency,
-    startPeriod: client.start_period ?? "",
-    active: client.active,
-  });
-  const [saving, setSaving] = useState(false);
-
-  async function save(event: FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    try {
-      const response = await fetch("/api/admin/clients", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: client.id,
-          name: form.name,
-          email: form.email || null,
-          phone: form.phone || null,
-          monthlyAmount: Number(form.monthlyAmount),
-          currency: form.currency,
-          startPeriod: form.startPeriod || null,
-          active: form.active,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error ?? "Error");
-      onSaved("Cliente actualizado");
-    } catch (err) {
-      onError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={save}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-        gap: 12,
-        alignItems: "end",
-      }}
-    >
-      <Field label="Nombre">
-        <input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-      </Field>
-      <Field label="Email">
-        <input style={input} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      </Field>
-      <Field label="WhatsApp">
-        <input style={input} placeholder="5491122334455" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-      </Field>
-      <Field label="Monto mensual">
-        <input style={input} type="number" value={form.monthlyAmount} onChange={(e) => setForm({ ...form, monthlyAmount: e.target.value })} />
-      </Field>
-      <Field label="Moneda">
-        <input style={input} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
-      </Field>
-      <Field label="Primer período (YYYY-MM)">
-        <input style={input} value={form.startPeriod} onChange={(e) => setForm({ ...form, startPeriod: e.target.value })} />
-      </Field>
-      <Field label="Activo">
-        <select
-          style={input}
-          value={form.active ? "1" : "0"}
-          onChange={(e) => setForm({ ...form, active: e.target.value === "1" })}
-        >
-          <option value="1">Sí</option>
-          <option value="0">No</option>
-        </select>
-      </Field>
-      <button style={button} type="submit" disabled={saving}>
-        {saving ? "Guardando..." : "Guardar"}
-      </button>
-    </form>
-  );
-}
-
-function ManualPaymentForm({
-  client,
-  onPaid,
-  onError,
-}: {
-  client: AdminClient;
-  onPaid: (message: string) => void;
-  onError: (message: string) => void;
-}) {
-  const unpaid = (client.status?.invoices ?? []).filter(
-    (invoice) => invoice.status === "pending" || invoice.status === "overdue"
-  );
-  const [selected, setSelected] = useState<string[]>(unpaid.map((invoice) => invoice.id));
-  const [method, setMethod] = useState("Transferencia bancaria");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const total = unpaid
-    .filter((invoice) => selected.includes(invoice.id))
-    .reduce((acc, invoice) => acc + invoice.amount, 0);
-
-  async function confirm() {
-    setSaving(true);
-    try {
-      const response = await fetch("/api/admin/payments", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clientId: client.id, invoiceIds: selected, method, note }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error ?? "Error");
-      onPaid(`Pago confirmado: ${money(data.amount, client.currency)}`);
-    } catch (err) {
-      onError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (unpaid.length === 0) {
-    return (
-      <div style={{ color: COLORS.muted, fontSize: 13 }}>
-        No hay facturas pendientes para {client.name}.
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div style={{ fontWeight: 700, marginBottom: 10 }}>
-        Confirmar pago manual · {client.name}
-      </div>
-      <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-        {unpaid.map((invoice) => (
-          <label key={invoice.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={selected.includes(invoice.id)}
-              onChange={(event) =>
-                setSelected((current) =>
-                  event.target.checked
-                    ? [...current, invoice.id]
-                    : current.filter((id) => id !== invoice.id)
-                )
-              }
-            />
-            <span>
-              {invoice.period} · vence {shortDate(invoice.dueDate)} ·{" "}
-              {money(invoice.amount, invoice.currency)}
-              {invoice.status === "overdue" ? " (vencida)" : ""}
-            </span>
-          </label>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
-        <Field label="Medio de pago">
-          <select style={{ ...input, width: 200 }} value={method} onChange={(e) => setMethod(e.target.value)}>
-            <option>Transferencia bancaria</option>
-            <option>Efectivo</option>
-            <option>Mercado Pago</option>
-            <option>Otro</option>
-          </select>
-        </Field>
-        <Field label="Nota (opcional)">
-          <input style={{ ...input, width: 260 }} value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
-        <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div style={{ color: COLORS.muted, fontSize: 12 }}>Total seleccionado</div>
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
-            {money(total, client.currency)}
-          </div>
-          <button style={button} onClick={confirm} disabled={saving || selected.length === 0}>
-            {saving ? "Registrando..." : "Confirmar pago"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label style={{ display: "grid", gap: 5 }}>
-      <span style={{ fontSize: 11, color: COLORS.muted, textTransform: "uppercase" }}>{label}</span>
-      {children}
-    </label>
   );
 }

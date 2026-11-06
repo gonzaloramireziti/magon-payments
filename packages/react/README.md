@@ -114,3 +114,37 @@ El tema por defecto es oscuro. Para forzar uno claro:
 
 El bloqueo del componente es UX. La protección real debe hacerse en el backend de Magon
 (validación server-side). La `clientKey` viaja en el front: no es un secreto fuerte.
+
+## Reportes: `<MagonSupport>`
+
+Botón flotante para que el cliente reporte problemas o pida funcionalidades. Los reportes
+llegan al tablero del panel de Magon con el cliente, el usuario y la pantalla ya cargados.
+
+```tsx
+import { MagonSupport } from "magon-pay-react";
+
+<MagonSupport
+  clientKey="magon_xxxxxxxx"
+  apiBaseUrl="https://pay.magon.com"
+  channel="admin"                                   // "admin", "portal", etc.
+  reporter={{ name: user.name, email: user.email, id: user.id }}
+  appVersion={import.meta.env.VITE_APP_VERSION}
+/>
+```
+
+Qué tipos se pueden cargar lo decide el servidor según el cliente y el `channel`
+(`clients.support_policy`): si un canal solo admite problemas, el formulario no ofrece pedir
+funcionalidades. Las capturas se pueden adjuntar o pegar con Ctrl+V y se achican antes de subir.
+
+| Prop | Tipo | Default | Descripción |
+| --- | --- | --- | --- |
+| `clientKey` | `string` | — | KEY del cliente (obligatoria) |
+| `apiBaseUrl` | `string` | `""` | URL del backend Magon |
+| `channel` | `string` | `"default"` | Desde dónde se reporta |
+| `reporter` | `{ name, email, id }` | — | Usuario logueado en la app del cliente |
+| `appVersion` | `string` | — | Versión de la app, para ubicar el problema |
+| `position` | `"bottom-right" \| "bottom-left"` | `"bottom-right"` | Lugar del botón flotante |
+| `hideTrigger` / `open` / `onOpenChange` | — | — | Abrirlo desde un menú propio |
+| `renderTrigger` | `(open) => ReactNode` | — | Botón propio |
+| `theme`, `labels` | — | — | Mismo tema que `MagonPayGate`; textos en español |
+| `onSubmitted` | `(ticket) => void` | — | Callback con `{ id, number }` |

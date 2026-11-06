@@ -22,3 +22,13 @@ export {
   type MagonSubscriptionState,
   type MagonSubscriptionStatus,
 } from "./types";
+export { MagonSupport, DEFAULT_SUPPORT_LABELS } from "./MagonSupport";
+export type {
+  MagonSupportProps,
+  MagonSupportLabels,
+  MagonSupportReporter,
+  MagonClientTicket,
+  MagonTicketType,
+  MagonTicketUrgency,
+  MagonTicketStatus,
+} from "./MagonSupport";

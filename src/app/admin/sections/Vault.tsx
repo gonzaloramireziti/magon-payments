@@ -195,6 +195,58 @@ export function Vault({ me, clients }: { me: Me; clients: ClientOption[] }) {
     });
   }
 
+  function secretControls(item: Item) {
+    if (!state) return null;
+    return item.has_secret ? (
+      <Group gap={4} wrap="nowrap">
+        <Code style={{ wordBreak: "break-all" }}>{revealed[item.id] ?? "••••••••••"}</Code>
+        <Tooltip label={state.unlocked ? (revealed[item.id] ? "Ocultar" : "Ver 30 segundos") : "Desbloqueá la bóveda"}>
+          <ActionIcon size="sm" variant="subtle" color="gray" disabled={!state.unlocked} onClick={() => toggleReveal(item)} aria-label="Ver secreto">
+            {revealed[item.id] ? <IconEyeOff size={12} /> : <IconEye size={12} />}
+          </ActionIcon>
+        </Tooltip>
+        <Tooltip label={state.unlocked ? "Copiar" : "Desbloqueá la bóveda"}>
+          <ActionIcon size="sm" variant="subtle" color="gray" disabled={!state.unlocked} onClick={() => copySecret(item)} aria-label="Copiar secreto">
+            <IconCopy size={12} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
+    ) : (
+      <Text size="sm" c="dimmed">
+        Sin secreto
+      </Text>
+    );
+  }
+
+  function copyable(value: string | null, label: string) {
+    return value ? (
+      <Group gap={4} wrap="nowrap">
+        <Code style={{ wordBreak: "break-all" }}>{value}</Code>
+        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => copy(value, label)} aria-label={`Copiar ${label.toLowerCase()}`}>
+          <IconCopy size={12} />
+        </ActionIcon>
+      </Group>
+    ) : (
+      <Text size="sm" c="dimmed">
+        —
+      </Text>
+    );
+  }
+
+  function itemActions(item: Item) {
+    if (!state) return null;
+    return (
+      <Group gap={2} wrap="nowrap">
+        <ActionIcon variant="subtle" color="gray" disabled={!state.unlocked} onClick={() => setEditing(item)} aria-label="Editar">
+          <IconPencil size={16} />
+        </ActionIcon>
+        <ActionIcon variant="subtle" color="red" disabled={!state.unlocked} onClick={() => remove(item)} aria-label="Borrar">
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Group>
+    );
+  }
+
   if (error) return <Alert color="yellow">{error}</Alert>;
   if (!state) {
     return (
@@ -223,7 +275,7 @@ export function Vault({ me, clients }: { me: Me; clients: ClientOption[] }) {
     <Stack gap="md">
       {state.unlocked ? (
         <Alert color="teal" icon={<IconLockOpen size={18} />} py="xs">
-          <Group justify="space-between" wrap="nowrap">
+          <Group justify="space-between" wrap={mobile ? "wrap" : "nowrap"} gap="xs">
             <Text size="sm">Bóveda desbloqueada. Se bloquea sola a los 15 minutos; cada secreto que ves queda registrado.</Text>
             <Button size="xs" variant="white" color="teal" leftSection={<IconLock size={14} />} onClick={lock}>
               Bloquear
@@ -269,8 +321,43 @@ export function Vault({ me, clients }: { me: Me; clients: ClientOption[] }) {
         </Group>
       </Group>
 
-      <Paper>
-        <Table.ScrollContainer minWidth={760}>
+      {mobile ? (
+        <Stack gap="xs">
+          {visible.map((item) => (
+            <Paper key={item.id} p="sm">
+              <Group justify="space-between" wrap="nowrap" mb={6}>
+                <div style={{ minWidth: 0 }}>
+                  <Text size="sm" fw={600}>
+                    {item.name}
+                  </Text>
+                  <Group gap={4}>
+                    <Badge size="xs" color="gray">
+                      {KIND_LABEL[item.kind] ?? item.kind}
+                    </Badge>
+                    {item.client_name && (
+                      <Badge size="xs" variant="outline" color="gray" tt="none">
+                        {item.client_name}
+                      </Badge>
+                    )}
+                  </Group>
+                </div>
+                {itemActions(item)}
+              </Group>
+              <Stack gap={4}>
+                {item.host && copyable(item.host, "Host")}
+                {item.username && copyable(item.username, "Usuario")}
+                {secretControls(item)}
+                {item.notes && (
+                  <Text size="xs" c="dimmed">
+                    {item.notes}
+                  </Text>
+                )}
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      ) : (
+        <Paper>
           <Table verticalSpacing="sm" highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -304,76 +391,21 @@ export function Vault({ me, clients }: { me: Me; clients: ClientOption[] }) {
                       </Text>
                     )}
                   </Table.Td>
-                  <Table.Td>
-                    {item.host ? (
-                      <Group gap={4} wrap="nowrap">
-                        <Code style={{ wordBreak: "break-all" }}>{item.host}</Code>
-                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => copy(item.host!, "Host")} aria-label="Copiar host">
-                          <IconCopy size={12} />
-                        </ActionIcon>
-                      </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        —
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {item.username ? (
-                      <Group gap={4} wrap="nowrap">
-                        <Code>{item.username}</Code>
-                        <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => copy(item.username!, "Usuario")} aria-label="Copiar usuario">
-                          <IconCopy size={12} />
-                        </ActionIcon>
-                      </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        —
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {item.has_secret ? (
-                      <Group gap={4} wrap="nowrap">
-                        <Code style={{ wordBreak: "break-all" }}>{revealed[item.id] ?? "••••••••••"}</Code>
-                        <Tooltip label={state.unlocked ? (revealed[item.id] ? "Ocultar" : "Ver 30 segundos") : "Desbloqueá la bóveda"}>
-                          <ActionIcon size="sm" variant="subtle" color="gray" disabled={!state.unlocked} onClick={() => toggleReveal(item)} aria-label="Ver secreto">
-                            {revealed[item.id] ? <IconEyeOff size={12} /> : <IconEye size={12} />}
-                          </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label={state.unlocked ? "Copiar" : "Desbloqueá la bóveda"}>
-                          <ActionIcon size="sm" variant="subtle" color="gray" disabled={!state.unlocked} onClick={() => copySecret(item)} aria-label="Copiar secreto">
-                            <IconCopy size={12} />
-                          </ActionIcon>
-                        </Tooltip>
-                      </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        Sin secreto
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={2} wrap="nowrap">
-                      <ActionIcon variant="subtle" color="gray" disabled={!state.unlocked} onClick={() => setEditing(item)} aria-label="Editar">
-                        <IconPencil size={16} />
-                      </ActionIcon>
-                      <ActionIcon variant="subtle" color="red" disabled={!state.unlocked} onClick={() => remove(item)} aria-label="Borrar">
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
+                  <Table.Td>{copyable(item.host, "Host")}</Table.Td>
+                  <Table.Td>{copyable(item.username, "Usuario")}</Table.Td>
+                  <Table.Td>{secretControls(item)}</Table.Td>
+                  <Table.Td>{itemActions(item)}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
-        </Table.ScrollContainer>
-        {visible.length === 0 && (
-          <Text size="sm" c="dimmed" p="md">
-            {state.items.length ? "No hay credenciales que coincidan." : "Todavía no hay credenciales guardadas."}
-          </Text>
-        )}
-      </Paper>
+        </Paper>
+      )}
+      {visible.length === 0 && (
+        <Text size="sm" c="dimmed">
+          {state.items.length ? "No hay credenciales que coincidan." : "Todavía no hay credenciales guardadas."}
+        </Text>
+      )}
 
       {showLog && state.unlocked && (
         <Paper p="md">

@@ -221,6 +221,33 @@ async function signAttachments(
   }));
 }
 
+export type TicketSummary = {
+  id: string;
+  number: number;
+  title: string;
+  type: TicketType;
+  status: TicketStatus;
+  client_name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+// Versión liviana para consultar seguido: sin capturas firmadas ni textos largos.
+export async function listTicketSummaries(): Promise<TicketSummary[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("tickets")
+    .select("id,number,title,type,status,created_at,updated_at,clients(name)")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const { clients, ...ticket } = row as unknown as Omit<TicketSummary, "client_name"> & {
+      clients: { name: string } | null;
+    };
+    return { ...ticket, client_name: clients?.name ?? "-" };
+  });
+}
+
 export async function listAdminTickets(includeDiscarded: boolean): Promise<AdminTicket[]> {
   const supabase = getSupabaseAdmin();
   let query = supabase

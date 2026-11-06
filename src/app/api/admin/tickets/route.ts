@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getAdminSession, isAdminRequest } from "@/lib/admin/auth";
-import { isMissingTable, listAdminTickets, TicketError, updateTicket } from "@/lib/tickets/service";
+import { isMissingTable, listAdminTickets, listTicketSummaries, TicketError, updateTicket } from "@/lib/tickets/service";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -16,8 +16,10 @@ function handleError(error: unknown) {
 
 export async function GET(request: NextRequest) {
   if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
-  const includeDiscarded = new URL(request.url).searchParams.get("discarded") === "1";
+  const params = new URL(request.url).searchParams;
+  const includeDiscarded = params.get("discarded") === "1";
   try {
+    if (params.get("summary") === "1") return okJson({ tickets: await listTicketSummaries() });
     return okJson({ tickets: await listAdminTickets(includeDiscarded) });
   } catch (error) {
     return handleError(error);

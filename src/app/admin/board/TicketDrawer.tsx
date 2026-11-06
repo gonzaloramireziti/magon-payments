@@ -29,8 +29,11 @@ import {
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import {
+  IconArrowBackUp,
   IconArrowRight,
   IconCheck,
+  IconCircleCheck,
+  IconTrashX,
   IconCopy,
   IconExternalLink,
   IconSparkles,
@@ -149,6 +152,9 @@ export function TicketDrawer({
   const [promptOpen, setPromptOpen] = useState(false);
   const [includeComments, setIncludeComments] = useState(true);
   const [prompt, setPrompt] = useState("");
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardReason, setDiscardReason] = useState("");
+  const [discarding, setDiscarding] = useState(false);
   const ticketId = ticket?.id ?? null;
 
   const loadActivity = useCallback(async () => {
@@ -166,6 +172,8 @@ export function TicketDrawer({
     setComment("");
     setTab("detalle");
     setPromptOpen(false);
+    setDiscardOpen(false);
+    setDiscardReason("");
     void loadActivity();
   }, [loadActivity]);
 
@@ -204,6 +212,28 @@ export function TicketDrawer({
     .join(" · ");
   const comments = activity?.filter((item) => item.kind === "comment").length ?? 0;
 
+  // El motivo queda como comentario, así se sabe por qué no se hizo.
+  async function discard() {
+    setDiscarding(true);
+    try {
+      if (discardReason.trim()) {
+        await api("/api/admin/tickets/activity", {
+          method: "POST",
+          json: { ticketId: ticket!.id, body: `Descartado: ${discardReason.trim()}` },
+        });
+      }
+      await change({ status: "discarded" });
+      setDiscardOpen(false);
+      setDiscardReason("");
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setDiscarding(false);
+    }
+  }
+
+  const closed = ticket.status === "done" || ticket.status === "discarded";
+
   function openPrompt(withComments = includeComments) {
     setPrompt(
       buildTicketPrompt(ticket!, { clientContext, comments: activity ?? [], includeComments: withComments })
@@ -240,16 +270,74 @@ export function TicketDrawer({
             Cargado {relative(ticket.created_at)} ({dateTime(ticket.created_at)})
             {ticket.resolved_at ? ` · cerrado ${relative(ticket.resolved_at)}` : ""}
           </Text>
-          <Button
-            size="xs"
-            variant="light"
-            leftSection={<IconSparkles size={14} />}
-            onClick={() => openPrompt()}
-            loading={activity === null}
-          >
-            Generar prompt
-          </Button>
+          <Group gap={6}>
+            {closed ? (
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconArrowBackUp size={14} />}
+                onClick={() => void change({ status: "analysis" })}
+              >
+                Reabrir
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="teal"
+                  leftSection={<IconCircleCheck size={14} />}
+                  onClick={() => void change({ status: "done" })}
+                >
+                  Resolver
+                </Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="red"
+                  leftSection={<IconTrashX size={14} />}
+                  onClick={() => setDiscardOpen(true)}
+                >
+                  Descartar
+                </Button>
+              </>
+            )}
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconSparkles size={14} />}
+              onClick={() => openPrompt()}
+              loading={activity === null}
+            >
+              Generar prompt
+            </Button>
+          </Group>
         </Group>
+
+        <Modal opened={discardOpen} onClose={() => setDiscardOpen(false)} title={`Descartar el ticket #${ticket.number}`}>
+          <Stack gap="sm">
+            <Text size="sm">
+              Sale del tablero y pasa a Terminados. Se puede reabrir cuando quieras.
+            </Text>
+            <Textarea
+              label="Motivo (opcional)"
+              description="Queda como comentario en la actividad del ticket"
+              placeholder="Duplicado del #12, no es un error, fuera de alcance…"
+              autosize
+              minRows={2}
+              value={discardReason}
+              onChange={(e) => setDiscardReason(e.currentTarget.value)}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setDiscardOpen(false)}>
+                Cancelar
+              </Button>
+              <Button color="red" onClick={discard} loading={discarding}>
+                Descartar
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <Modal opened={promptOpen} onClose={() => setPromptOpen(false)} title={`Prompt para el ticket #${ticket.number}`} size="xl">
           <Stack gap="sm">

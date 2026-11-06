@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActionIcon,
   Alert,
@@ -9,16 +9,19 @@ import {
   Badge,
   Burger,
   Group,
+  Indicator,
   Kbd,
   Menu,
   NavLink,
+  Switch,
   Text,
   Tooltip,
   UnstyledButton,
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
-import { useDisclosure, useHotkeys } from "@mantine/hooks";
+import { useDisclosure, useDocumentTitle, useHotkeys } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import { Spotlight, spotlight, type SpotlightActionData } from "@mantine/spotlight";
 import {
   IconBug,
@@ -34,20 +37,36 @@ import {
   IconSun,
   IconUsers,
   IconAlertTriangle,
+  IconArchive,
+  IconBell,
 } from "@tabler/icons-react";
 import { Brand } from "./Brand";
-import { Board } from "./board/Board";
+import { Board, applyLocal, type TicketChanges } from "./board/Board";
+import { TicketDrawer } from "./board/TicketDrawer";
+import { Closed } from "./sections/Closed";
+import { diffSummaries, snapshot, titleWithCount, type Summary } from "./lib/watch";
+import {
+  desktopEnabled,
+  desktopSupported,
+  disableDesktop,
+  enableDesktop,
+  playChime,
+  setSoundEnabled,
+  showDesktop,
+  soundEnabled,
+} from "./lib/alerts";
 import { Overview } from "./sections/Overview";
 import { Clients } from "./sections/Clients";
 import { Payments } from "./sections/Payments";
 import { Costs } from "./sections/Costs";
 import { Users } from "./sections/Users";
 import { api, notifyError } from "./lib/api";
-import { initials } from "./lib/format";
+import { initials, relative } from "./lib/format";
 import { isClosed, type Me, type PanelUser, type Ticket } from "./lib/tickets";
 
 const SECTIONS = [
   { id: "tablero", label: "Tablero", icon: IconLayoutKanban },
+  { id: "terminados", label: "Terminados", icon: IconArchive },
   { id: "resumen", label: "Resumen", icon: IconChartPie },
   { id: "clientes", label: "Clientes", icon: IconBuildingStore },
   { id: "cobros", label: "Cobros", icon: IconCash },
@@ -72,6 +91,10 @@ export function AdminApp({ me }: { me: Me }) {
   const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null }>>([]);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [clientFocus, setClientFocus] = useState<string | null>(null);
+  const [unseen, setUnseen] = useState<Summary[]>([]);
+  const [desktopOn, setDesktopOn] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const lastSnapshot = useRef<Map<string, string> | null>(null);
   const { setColorScheme } = useMantineColorScheme();
   const scheme = useComputedColorScheme("light");
 
@@ -122,13 +145,77 @@ export function AdminApp({ me }: { me: Me }) {
     api<{ clients: Array<{ id: string; name: string; notes: string | null }> }>("/api/admin/clients")
       .then((data) => setClients(data.clients))
       .catch(() => setClients([]));
-    // El tablero se refresca solo cada minuto para ver lo que carga otro.
-    const id = window.setInterval(() => void loadTickets(), 60_000);
-    return () => window.clearInterval(id);
   }, [loadTickets, loadUsers]);
+
+  useEffect(() => {
+    setDesktopOn(desktopEnabled());
+    setSoundOn(soundEnabled());
+  }, []);
+
+  // Cada 20 segundos (y al volver a la pestaña) consulta un resumen liviano. Si algo cambió,
+  // recarga los tickets completos; si hay tickets nuevos, avisa.
+  const poll = useCallback(async () => {
+    try {
+      const data = await api<{ tickets: Summary[] }>("/api/admin/tickets?summary=1");
+      const { changed, added } = diffSummaries(lastSnapshot.current, data.tickets);
+      lastSnapshot.current = snapshot(data.tickets);
+      if (changed) void loadTickets();
+      if (added.length === 0) return;
+      setUnseen((current) => [...added, ...current].slice(0, 20));
+      playChime();
+      for (const ticket of added.slice(0, 3)) {
+        notifications.show({
+          color: "brand",
+          title: `Nuevo ticket #${ticket.number} · ${ticket.client_name}`,
+          message: ticket.title,
+          autoClose: 8000,
+        });
+        showDesktop(`Nuevo ticket #${ticket.number} · ${ticket.client_name}`, ticket.title, () => {
+          go("tablero");
+          setOpenTicketId(ticket.id);
+        });
+      }
+    } catch {
+      /* sin conexión o sesión vencida: se reintenta en el próximo ciclo */
+    }
+  }, [loadTickets, go]);
+
+  useEffect(() => {
+    void poll();
+    const id = window.setInterval(() => void poll(), 20_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [poll]);
+
+  useDocumentTitle(titleWithCount("Magon · Panel", unseen.length));
+
+  // Aplica el cambio en pantalla al instante y lo revierte si el servidor lo rechaza.
+  const patchTicket = useCallback(
+    async (id: string, changes: TicketChanges) => {
+      let previous: Ticket[] = [];
+      setTickets((current) => {
+        previous = current;
+        return current.map((ticket) => (ticket.id === id ? applyLocal(ticket, changes, users) : ticket));
+      });
+      try {
+        await api("/api/admin/tickets", { method: "PATCH", json: { id, ...changes } });
+      } catch (error) {
+        setTickets(previous);
+        notifyError(error);
+      }
+    },
+    [users]
+  );
 
   useHotkeys([["mod+K", () => spotlight.open()]]);
 
+  const openedTicket = tickets.find((ticket) => ticket.id === openTicketId) ?? null;
   const clientContexts = useMemo(
     () => Object.fromEntries(clients.map((c) => [c.id, c.notes ?? null])) as Record<string, string | null>,
     [clients]
@@ -226,6 +313,78 @@ export function AdminApp({ me }: { me: Me }) {
             <ActionIcon variant="default" size="lg" hiddenFrom="xs" onClick={() => spotlight.open()} aria-label="Buscar">
               <IconSearch size={18} />
             </ActionIcon>
+            <Menu position="bottom-end" width={320} withinPortal>
+              <Menu.Target>
+                <Indicator label={unseen.length} size={16} disabled={unseen.length === 0} offset={4}>
+                  <ActionIcon variant="default" size="lg" aria-label="Avisos">
+                    <IconBell size={18} />
+                  </ActionIcon>
+                </Indicator>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>Tickets nuevos</Menu.Label>
+                {unseen.length === 0 && (
+                  <Text size="sm" c="dimmed" px="sm" py={6}>
+                    No hay tickets nuevos desde que abriste el panel.
+                  </Text>
+                )}
+                {unseen.slice(0, 8).map((ticket) => (
+                  <Menu.Item
+                    key={ticket.id}
+                    onClick={() => {
+                      go("tablero");
+                      setOpenTicketId(ticket.id);
+                      setUnseen((current) => current.filter((t) => t.id !== ticket.id));
+                    }}
+                  >
+                    <Text size="sm" fw={600} lineClamp={1}>
+                      #{ticket.number} {ticket.title}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {ticket.client_name} · {relative(ticket.updated_at)}
+                    </Text>
+                  </Menu.Item>
+                ))}
+                {unseen.length > 0 && (
+                  <Menu.Item c="dimmed" onClick={() => setUnseen([])}>
+                    Marcar todos como vistos
+                  </Menu.Item>
+                )}
+                <Menu.Divider />
+                <Menu.Label>Avisos</Menu.Label>
+                <Group px="sm" py={6} justify="space-between" wrap="nowrap" onClick={(e) => e.stopPropagation()}>
+                  <Text size="sm">Notificación del sistema</Text>
+                  <Switch
+                    size="sm"
+                    checked={desktopOn}
+                    disabled={!desktopSupported()}
+                    onChange={async (event) => {
+                      if (event.currentTarget.checked) {
+                        const ok = await enableDesktop();
+                        setDesktopOn(ok);
+                        if (!ok) notifyError(new Error("El navegador no dio permiso para notificaciones. Habilitalo en la configuración del sitio."));
+                      } else {
+                        disableDesktop();
+                        setDesktopOn(false);
+                      }
+                    }}
+                  />
+                </Group>
+                <Group px="sm" py={6} justify="space-between" wrap="nowrap" onClick={(e) => e.stopPropagation()}>
+                  <Text size="sm">Sonido</Text>
+                  <Switch
+                    size="sm"
+                    checked={soundOn}
+                    onChange={(event) => {
+                      const value = event.currentTarget.checked;
+                      setSoundEnabled(value);
+                      setSoundOn(value);
+                      if (value) playChime();
+                    }}
+                  />
+                </Group>
+              </Menu.Dropdown>
+            </Menu>
             <Tooltip label={scheme === "dark" ? "Modo claro" : "Modo oscuro"}>
               <ActionIcon
                 variant="default"
@@ -305,12 +464,16 @@ export function AdminApp({ me }: { me: Me }) {
             tickets={tickets}
             state={ticketsState}
             users={users}
-            setTickets={setTickets}
+            onPatch={patchTicket}
             reload={loadTickets}
-            openTicketId={openTicketId}
-            setOpenTicketId={setOpenTicketId}
-            clientContexts={clientContexts}
+            setOpenTicketId={(id) => {
+              setOpenTicketId(id);
+              if (id) setUnseen((current) => current.filter((t) => t.id !== id));
+            }}
           />
+        )}
+        {section === "terminados" && (
+          <Closed tickets={tickets} state={ticketsState} me={me} onOpen={setOpenTicketId} />
         )}
         {section === "resumen" && <Overview onOpenBoard={() => go("tablero")} />}
         {section === "clientes" && (
@@ -319,6 +482,16 @@ export function AdminApp({ me }: { me: Me }) {
         {section === "cobros" && <Payments />}
         {section === "costos" && <Costs />}
         {section === "usuarios" && <Users me={me} users={users} reload={loadUsers} />}
+
+        <TicketDrawer
+          ticket={openedTicket}
+          me={me}
+          users={users}
+          labelOptions={Array.from(new Set(tickets.flatMap((t) => t.labels))).sort()}
+          clientContext={openedTicket ? clientContexts[openedTicket.client_id] ?? null : null}
+          onClose={() => setOpenTicketId(null)}
+          onChange={patchTicket}
+        />
       </AppShell.Main>
     </AppShell>
   );

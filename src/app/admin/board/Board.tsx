@@ -36,7 +36,6 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { api, notifyError } from "../lib/api";
 import { initials, relative } from "../lib/format";
 import {
   COLUMNS,
@@ -63,7 +62,6 @@ import {
   type SortKey,
 } from "./filter";
 import { TicketCard } from "./TicketCard";
-import { TicketDrawer } from "./TicketDrawer";
 
 export type TicketChanges = Partial<{
   status: TicketStatus;
@@ -94,7 +92,7 @@ function writeStored(key: string, value: unknown) {
 }
 
 // Aplica los cambios al ticket en memoria antes de que responda el servidor.
-function applyLocal(ticket: Ticket, changes: TicketChanges, users: PanelUser[]): Ticket {
+export function applyLocal(ticket: Ticket, changes: TicketChanges, users: PanelUser[]): Ticket {
   const next = { ...ticket };
   if (changes.status) next.status = changes.status;
   if (changes.urgency) next.urgency = changes.urgency;
@@ -116,21 +114,17 @@ export function Board({
   tickets,
   state,
   users,
-  setTickets,
+  onPatch,
   reload,
-  openTicketId,
   setOpenTicketId,
-  clientContexts,
 }: {
   me: Me;
   tickets: Ticket[];
   state: "loading" | "ready" | "unavailable";
   users: PanelUser[];
-  setTickets: (update: (current: Ticket[]) => Ticket[]) => void;
+  onPatch: (id: string, changes: TicketChanges) => Promise<void>;
   reload: () => Promise<void>;
-  openTicketId: string | null;
   setOpenTicketId: (id: string | null) => void;
-  clientContexts: Record<string, string | null>;
 }) {
   const mobile = useMediaQuery("(max-width: 48em)");
   const [filters, setFiltersState] = useState<BoardFilters>(EMPTY_FILTERS);
@@ -160,19 +154,8 @@ export function Board({
     writeStored(VIEW_KEY, { view: value });
   }
 
-  async function patch(id: string, changes: TicketChanges) {
-    let previous: Ticket[] = [];
-    setTickets((current) => {
-      previous = current;
-      return current.map((ticket) => (ticket.id === id ? applyLocal(ticket, changes, users) : ticket));
-    });
-    try {
-      await api("/api/admin/tickets", { method: "PATCH", json: { id, ...changes } });
-    } catch (error) {
-      setTickets(() => previous);
-      notifyError(error);
-    }
-  }
+  const patch = onPatch;
+
 
   const clients = useMemo(() => {
     const map = new Map<string, string>();
@@ -184,7 +167,6 @@ export function Board({
     () => applyFilters(tickets, { ...filters, search }, me.id),
     [tickets, filters, search, me.id]
   );
-  const opened = tickets.find((ticket) => ticket.id === openTicketId) ?? null;
   const filterCount = activeFilterCount(filters);
   const openCount = visible.filter((ticket) => !isClosed(ticket.status)).length;
 
@@ -482,15 +464,6 @@ export function Board({
         />
       )}
 
-      <TicketDrawer
-        ticket={opened}
-        me={me}
-        users={users}
-        labelOptions={labels}
-        clientContext={opened ? clientContexts[opened.client_id] ?? null : null}
-        onClose={() => setOpenTicketId(null)}
-        onChange={patch}
-      />
     </Stack>
   );
 }
@@ -520,7 +493,7 @@ function SortHeader({
   );
 }
 
-function TicketList({
+export function TicketList({
   tickets,
   sort,
   setSort,
@@ -598,7 +571,7 @@ function TicketList({
               <Table.Th>
                 <SortHeader label="Urgencia" sortKey="urgency" sort={sort} setSort={setSort} />
               </Table.Th>
-              <Table.Th>
+              <Table.Th miw={150}>
                 <Text size="xs" fw={600} c="dimmed" tt="uppercase">
                   Estado
                 </Text>
@@ -646,8 +619,8 @@ function TicketList({
                 <Table.Td>
                   <Badge color={URGENCY[ticket.urgency].color}>{URGENCY[ticket.urgency].label}</Badge>
                 </Table.Td>
-                <Table.Td>
-                  <Badge color={STATUS_COLOR[ticket.status]} variant="dot">
+                <Table.Td style={{ whiteSpace: "nowrap" }}>
+                  <Badge color={STATUS_COLOR[ticket.status]} variant="dot" style={{ overflow: "visible" }}>
                     {STATUS_LABEL[ticket.status]}
                   </Badge>
                 </Table.Td>

@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { isAdminRequest } from "@/lib/admin/auth";
+import { getAdminSession, isAdminRequest } from "@/lib/admin/auth";
 import { isMissingTable, listAdminTickets, TicketError, updateTicket } from "@/lib/tickets/service";
 import { errorJson, okJson } from "@/lib/http";
 
@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = getAdminSession(request);
+  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -35,7 +36,7 @@ export async function PATCH(request: NextRequest) {
   const id = typeof body.id === "string" ? body.id : "";
   if (!id) return errorJson("Falta el id del ticket", 400, "MISSING_ID");
   try {
-    return okJson({ ticket: await updateTicket(id, body) });
+    return okJson({ ticket: await updateTicket(id, body, session) });
   } catch (error) {
     return handleError(error);
   }

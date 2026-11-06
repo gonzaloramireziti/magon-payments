@@ -166,3 +166,23 @@ export function resolvedAtFor(status: TicketStatus, current: string | null, now:
   if (status === "done" || status === "discarded") return current ?? now;
   return null;
 }
+
+// Etiquetas para catalogar: minúsculas, sin espacios de más, sin repetir, hasta 10 de 30 caracteres.
+export const MAX_LABELS = 10;
+
+export function normalizeLabels(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const labels = raw
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 30))
+    .filter(Boolean);
+  return Array.from(new Set(labels)).slice(0, MAX_LABELS);
+}
+
+export const MAX_COMMENT = 5000;
+
+export function normalizeComment(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const body = raw.trim();
+  return body === "" ? null : body.slice(0, MAX_COMMENT);
+}

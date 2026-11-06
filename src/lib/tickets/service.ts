@@ -1,11 +1,14 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { findClientByKey } from "@/lib/subscription/service";
+import type { AdminSession } from "@/lib/admin/auth";
 import {
   allowedTypes,
   isTicketStatus,
   isTicketUrgency,
   LIMITS,
   normalizeChannel,
+  normalizeComment,
+  normalizeLabels,
   parsePolicy,
   resolvedAtFor,
   validateAttachments,
@@ -39,6 +42,8 @@ export type TicketRow = {
   user_agent: string | null;
   app_version: string | null;
   attachments: TicketAttachment[];
+  assignee_id: string | null;
+  labels: string[];
   internal_notes: string | null;
   resolved_at: string | null;
   created_at: string;
@@ -195,6 +200,7 @@ export async function listClientTickets(clientKey: string): Promise<PublicTicket
 
 export type AdminTicket = TicketRow & {
   client_name: string;
+  assignee_name: string | null;
   attachment_urls: Array<TicketAttachment & { url: string | null }>;
 };
 
@@ -219,7 +225,7 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from("tickets")
-    .select("*, clients(name)")
+    .select("*, clients(name), assignee:admin_users(name)")
     .order("position", { ascending: true })
     .limit(500);
   if (!includeDiscarded) query = query.neq("status", "discarded");
@@ -228,27 +234,64 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
 
   return Promise.all(
     (data ?? []).map(async (row) => {
-      const { clients, ...ticket } = row as TicketRow & { clients: { name: string } | null };
+      const { clients, assignee, ...ticket } = row as TicketRow & {
+        clients: { name: string } | null;
+        assignee: { name: string } | null;
+      };
       return {
         ...ticket,
+        labels: ticket.labels ?? [],
         client_name: clients?.name ?? "-",
+        assignee_name: assignee?.name ?? null,
         attachment_urls: await signAttachments(ticket.attachments),
       };
     })
   );
 }
 
-export async function updateTicket(id: string, raw: Record<string, unknown>): Promise<TicketRow> {
+type ActivityKind = "comment" | "status" | "assignee" | "urgency" | "labels";
+
+async function recordActivity(
+  ticketId: string,
+  actor: AdminSession,
+  kind: ActivityKind,
+  body: string | null,
+  meta: Record<string, unknown> = {}
+): Promise<void> {
+  const { error } = await getSupabaseAdmin().from("ticket_activity").insert({
+    ticket_id: ticketId,
+    author_id: actor.userId,
+    author_name: actor.name,
+    kind,
+    body,
+    meta,
+  });
+  if (error) console.error("[tickets] no se pudo registrar la actividad", error);
+}
+
+async function userName(id: string | null): Promise<string | null> {
+  if (!id) return null;
+  const { data } = await getSupabaseAdmin().from("admin_users").select("name").eq("id", id).maybeSingle();
+  return (data?.name as string | undefined) ?? null;
+}
+
+export async function updateTicket(
+  id: string,
+  raw: Record<string, unknown>,
+  actor: AdminSession
+): Promise<TicketRow> {
   const supabase = getSupabaseAdmin();
   const { data: current, error: readError } = await supabase
     .from("tickets")
-    .select("status,resolved_at")
+    .select("status,resolved_at,urgency,assignee_id,labels")
     .eq("id", id)
     .maybeSingle();
   if (readError) throw readError;
   if (!current) throw new TicketError("TICKET_NOT_FOUND", 404, "Ticket no encontrado");
 
   const update: Record<string, unknown> = {};
+  const events: Array<{ kind: ActivityKind; meta: Record<string, unknown> }> = [];
+
   if (raw.status !== undefined) {
     if (!isTicketStatus(raw.status)) {
       throw new TicketError("INVALID_STATUS", 400, "Estado inválido");
@@ -259,12 +302,29 @@ export async function updateTicket(id: string, raw: Record<string, unknown>): Pr
       (current.resolved_at as string | null) ?? null,
       new Date().toISOString()
     );
+    if (raw.status !== current.status) events.push({ kind: "status", meta: { from: current.status, to: raw.status } });
   }
   if (raw.urgency !== undefined) {
     if (!isTicketUrgency(raw.urgency)) {
       throw new TicketError("INVALID_URGENCY", 400, "Urgencia inválida");
     }
     update.urgency = raw.urgency;
+    if (raw.urgency !== current.urgency) events.push({ kind: "urgency", meta: { from: current.urgency, to: raw.urgency } });
+  }
+  if (raw.assigneeId !== undefined) {
+    const assigneeId = typeof raw.assigneeId === "string" && raw.assigneeId !== "" ? raw.assigneeId : null;
+    const name = await userName(assigneeId);
+    if (assigneeId && !name) throw new TicketError("INVALID_ASSIGNEE", 400, "Ese usuario no existe");
+    update.assignee_id = assigneeId;
+    if (assigneeId !== current.assignee_id) {
+      events.push({ kind: "assignee", meta: { from: await userName(current.assignee_id as string | null), to: name } });
+    }
+  }
+  if (raw.labels !== undefined) {
+    const labels = normalizeLabels(raw.labels);
+    update.labels = labels;
+    const before = ((current.labels as string[] | null) ?? []).slice().sort().join(",");
+    if (labels.slice().sort().join(",") !== before) events.push({ kind: "labels", meta: { to: labels } });
   }
   if (raw.position !== undefined) {
     const position = Number(raw.position);
@@ -285,5 +345,49 @@ export async function updateTicket(id: string, raw: Record<string, unknown>): Pr
     .select("*")
     .single();
   if (error) throw error;
+  for (const event of events) await recordActivity(id, actor, event.kind, null, event.meta);
   return data as TicketRow;
+}
+
+export type TicketActivity = {
+  id: string;
+  kind: ActivityKind;
+  authorName: string | null;
+  body: string | null;
+  meta: Record<string, unknown>;
+  createdAt: string;
+};
+
+export async function listActivity(ticketId: string): Promise<TicketActivity[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("ticket_activity")
+    .select("id,kind,author_name,body,meta,created_at")
+    .eq("ticket_id", ticketId)
+    .order("created_at", { ascending: true })
+    .limit(500);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    kind: row.kind as ActivityKind,
+    authorName: (row.author_name as string | null) ?? null,
+    body: (row.body as string | null) ?? null,
+    meta: (row.meta as Record<string, unknown>) ?? {},
+    createdAt: row.created_at as string,
+  }));
+}
+
+export async function addComment(ticketId: string, raw: unknown, actor: AdminSession): Promise<void> {
+  const body = normalizeComment(raw);
+  if (!body) throw new TicketError("EMPTY_COMMENT", 400, "El comentario está vacío");
+  const { data, error } = await getSupabaseAdmin().from("tickets").select("id").eq("id", ticketId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new TicketError("TICKET_NOT_FOUND", 404, "Ticket no encontrado");
+  const { error: insertError } = await getSupabaseAdmin().from("ticket_activity").insert({
+    ticket_id: ticketId,
+    author_id: actor.userId,
+    author_name: actor.name,
+    kind: "comment",
+    body,
+  });
+  if (insertError) throw insertError;
 }

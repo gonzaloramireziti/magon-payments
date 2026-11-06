@@ -17,7 +17,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mantine/core": "^7.17.8",
+    "@mantine/hooks": "^7.17.8",
+    "@mantine/modals": "^7.17.8",
+    "@mantine/notifications": "^7.17.8",
+    "@mantine/spotlight": "^7.17.8",
     "@supabase/supabase-js": "^2.47.10",
+    "@tabler/icons-react": "^3.50.0",
     "next": "^15.1.6",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
@@ -27,6 +33,9 @@
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
+    "postcss": "^8.5.32",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
     "typescript": "^5.7.3"
   }
 }

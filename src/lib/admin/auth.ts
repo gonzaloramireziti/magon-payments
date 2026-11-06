@@ -33,26 +33,54 @@ export function adminLoginEnabled(): boolean {
   return password() !== "";
 }
 
-export function createSessionToken(username: string): string {
+// Usuario de la sesión. "env" es el acceso de emergencia con ADMIN_USERNAME / ADMIN_PASSWORD,
+// que no tiene fila en admin_users.
+export type AdminSession = { userId: string | null; name: string; email: string | null };
+
+export const ENV_USER_ID = "env";
+
+export function createSessionToken(user: { id: string; name: string; email?: string | null }): string {
   const payload = Buffer.from(
-    JSON.stringify({ u: username, exp: Date.now() + SESSION_TTL_SECONDS * 1000 })
+    JSON.stringify({
+      u: user.id,
+      n: user.name,
+      e: user.email ?? null,
+      exp: Date.now() + SESSION_TTL_SECONDS * 1000,
+    })
   ).toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
 
-export function verifySessionToken(token: string | undefined | null): boolean {
-  if (!token) return false;
+export function readSessionToken(token: string | undefined | null): AdminSession | null {
+  if (!token) return null;
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
-  if (!safeEqual(signature, sign(payload))) return false;
+  if (!payload || !signature) return null;
+  if (!safeEqual(signature, sign(payload))) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      u?: string;
+      n?: string;
+      e?: string | null;
       exp?: number;
     };
-    return typeof data.exp === "number" && data.exp > Date.now();
+    if (typeof data.exp !== "number" || data.exp <= Date.now()) return null;
+    const id = typeof data.u === "string" ? data.u : ENV_USER_ID;
+    return {
+      userId: id === ENV_USER_ID ? null : id,
+      name: data.n ?? "Administrador",
+      email: data.e ?? null,
+    };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function verifySessionToken(token: string | undefined | null): boolean {
+  return readSessionToken(token) !== null;
+}
+
+export function getAdminSession(request: NextRequest): AdminSession | null {
+  return readSessionToken(request.cookies.get(ADMIN_COOKIE)?.value);
 }
 
 export function checkCredentials(username: string, candidate: string): boolean {

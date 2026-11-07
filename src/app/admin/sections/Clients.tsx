@@ -33,6 +33,7 @@ import {
   IconCheck,
   IconCopy,
   IconDots,
+  IconFileDownload,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -171,6 +172,13 @@ export function Clients({
           </Menu.Item>
           <Menu.Item leftSection={<IconCash size={14} />} onClick={() => setPaying(client)}>
             Confirmar pago
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconFileDownload size={14} />}
+            component="a"
+            href={`/api/admin/billing/notice?clientId=${client.id}`}
+          >
+            Aviso de cobro del mes (PDF)
           </Menu.Item>
           <Menu.Item
             leftSection={<IconBrandWhatsapp size={14} />}

@@ -19,7 +19,7 @@ import {
   Title,
   Tooltip,
 } from "@mantine/core";
-import { IconBrandWhatsapp, IconRefresh } from "@tabler/icons-react";
+import { IconBrandWhatsapp, IconFileDownload, IconRefresh } from "@tabler/icons-react";
 import { api } from "../lib/api";
 import { bothCurrencies, money, shortDate } from "../lib/format";
 import { StatCard } from "./StatCard";
@@ -37,6 +37,7 @@ type CollectionRow = {
   daysOverdue: number | null;
 };
 type Overview = {
+  period: string;
   periodLabel: string;
   dueDate: string;
   daysUntilDue: number;
@@ -146,11 +147,21 @@ export function Overview({ onOpenBoard }: { onOpenBoard: () => void }) {
                 : `venció hace ${-data.daysUntilDue} día(s)`}
           </Text>
         </div>
-        <Tooltip label="Actualizar">
-          <ActionIcon variant="default" size="lg" loading={loading} onClick={() => void load()} aria-label="Actualizar">
-            <IconRefresh size={18} />
-          </ActionIcon>
-        </Tooltip>
+        <Group gap="xs">
+          <Button
+            component="a"
+            href={`/api/admin/billing/notice?all=1&period=${data.period}`}
+            variant="default"
+            leftSection={<IconFileDownload size={16} />}
+          >
+            Avisos de cobro (PDF)
+          </Button>
+          <Tooltip label="Actualizar">
+            <ActionIcon variant="default" size="lg" loading={loading} onClick={() => void load()} aria-label="Actualizar">
+              <IconRefresh size={18} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
       </Group>
 
       <Paper p="md">
@@ -225,6 +236,17 @@ export function Overview({ onOpenBoard }: { onOpenBoard: () => void }) {
                       <Text size="sm" fw={700}>
                         {money(row.amountDue, row.currency)}
                       </Text>
+                      <Tooltip label={`Aviso de cobro de ${data.periodLabel}`}>
+                        <ActionIcon
+                          component="a"
+                          href={`/api/admin/billing/notice?clientId=${row.clientId}&period=${data.period}`}
+                          variant="light"
+                          color="gray"
+                          aria-label="Descargar aviso de cobro"
+                        >
+                          <IconFileDownload size={16} />
+                        </ActionIcon>
+                      </Tooltip>
                       {row.amountDue > 0 && (
                         <Tooltip label={row.phone ? "Mandar recordatorio" : "Sin WhatsApp cargado"}>
                           <ActionIcon

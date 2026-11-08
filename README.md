@@ -47,6 +47,10 @@ npm run dev                  # http://localhost:3000
 > `supabase/migrations/003_tickets.sql`: crea la tabla `tickets`, la columna
 > `clients.support_policy` y el bucket privado `ticket-attachments`.
 
+> Para la factura mensual, ejecutá `supabase/migrations/007_invoice_service.sql`: agrega a `clients`
+> el tipo de servicio (`service_type`, por ahora solo `recurring` = Cobro recurrente) y la
+> descripción que figura en la factura (`service_description`).
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno
@@ -145,6 +149,7 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `GET` | `/api/admin/dashboard?period=month\|all` | Ganancias, costos, deuda y cotización |
 | `POST` | `/api/admin/login` \| `/logout` | Sesión del panel `/admin` |
 | `GET/POST` | `/api/cron/invoices` | Genera facturas del período y marca vencidas (`x-cron-secret`) |
+| `GET` | `/api/admin/billing/invoice?clientId=...&period=YYYY-MM` | Factura mensual en PDF (`all=1` = todos los clientes; `inline=1` la abre) |
 | `GET` | `/api/receipts?key=KEY&invoiceId=...` | Comprobante de pago en PDF (factura paga) |
 | `GET` | `/api/protected` | Ejemplo de recurso protegido por suscripción |
 | `POST` | `/api/mock/pay` | Solo en modo mock: simula webhook aprobado |
@@ -290,6 +295,23 @@ import { MagonReceipts } from "magon-pay-react";
 El PDF (blanco y negro) lo genera el backend en `GET /api/receipts?key=...&invoiceId=...`, con el
 desglose del servicio de software (hosting, base de datos, dominio, mantenimiento funcional, soporte).
 Los textos del comprobante se editan en `src/lib/receipts/config.ts`.
+
+### Factura mensual (PDF)
+
+Cada mes, el día 1, el cron (`/api/cron/invoices`) genera la fila de `invoices` del mes anterior y desde
+ese momento su factura está disponible. El PDF se arma **al vuelo** (no se guarda ningún documento) con
+el formato de Magon Software LLC: número, fechas de emisión (día 1) y vencimiento (día 10), emisor,
+"Facturar a", el servicio del cliente y los totales. Si la factura ya está paga muestra "pagado el …"
+e importe adeudado en 0.
+
+- **Número:** `PREFIJO-0001`. El prefijo (8 caracteres) sale del id del cliente y el correlativo es la
+  posición de la factura entre las del cliente, ordenadas por período.
+- **Servicio:** en el panel, al editar el cliente, se elige el tipo (por ahora solo *Cobro recurrente*)
+  y la descripción que figura como concepto. Sin descripción se usa una genérica.
+- **Descarga:** menú del cliente → *Factura del mes (PDF)*, o
+  `GET /api/admin/billing/invoice?clientId=...&period=YYYY-MM` (sin `period` usa el último mes facturado).
+- Los datos del emisor se editan en `INVOICE_ISSUER` (`src/lib/billing/config.ts`). La tipografía (Inter)
+  va incrustada en `src/lib/billing/interFonts.ts`.
 
 ## Seguridad (importante)
 

@@ -4,6 +4,18 @@ const ALLOWED_METHODS = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
 const ALLOWED_HEADERS =
   "content-type, authorization, x-magon-client-key, x-admin-key, x-cron-secret, x-galiopay-token, x-galiopay-signature, x-galiopay-timestamp, x-galiopay-event-id";
 
+const ADMIN_REFERRER_HOSTS = ["crm.magonsoftware.com"];
+
+function comesFromAdminReferrer(request: NextRequest): boolean {
+  const referer = request.headers.get("referer");
+  if (!referer) return false;
+  try {
+    return ADMIN_REFERRER_HOSTS.includes(new URL(referer).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function resolveOrigin(requestOrigin: string | null): string | null {
   const configured = (process.env.CORS_ORIGINS ?? "*").trim();
   if (configured === "" || configured === "*") return "*";
@@ -27,6 +39,13 @@ function applyCors(response: NextResponse, allowOrigin: string | null): NextResp
 }
 
 export function middleware(request: NextRequest) {
+  if (!request.nextUrl.pathname.startsWith("/api")) {
+    if (request.nextUrl.pathname === "/" && comesFromAdminReferrer(request)) {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
+    return NextResponse.next();
+  }
+
   const allowOrigin = resolveOrigin(request.headers.get("origin"));
 
   if (request.method === "OPTIONS") {
@@ -37,5 +56,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*"],
+  matcher: ["/", "/api/:path*"],
 };

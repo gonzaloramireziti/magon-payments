@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isAdminRequest } from "@/lib/admin/auth";
 import { getSubscriptionStatus } from "@/lib/subscription/service";
 import { parsePolicy } from "@/lib/tickets/policy";
+import { isServiceType } from "@/lib/billing/config";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,9 @@ export async function POST(request: NextRequest) {
   if (!Number.isFinite(monthlyAmount) || monthlyAmount < 0) {
     return errorJson("El monto mensual es inválido", 400, "INVALID_AMOUNT");
   }
+  if (body.serviceType !== undefined && !isServiceType(body.serviceType)) {
+    return errorJson("Tipo de servicio inválido", 400, "INVALID_SERVICE_TYPE");
+  }
 
   const clientKey =
     typeof body.clientKey === "string" && body.clientKey.trim() !== ""
@@ -77,6 +81,11 @@ export async function POST(request: NextRequest) {
       active: body.active === undefined ? true : Boolean(body.active),
       notes: typeof body.notes === "string" ? body.notes : null,
       start_period: typeof body.startPeriod === "string" ? body.startPeriod : null,
+      service_type: isServiceType(body.serviceType) ? body.serviceType : "recurring",
+      service_description:
+        typeof body.serviceDescription === "string" && body.serviceDescription.trim() !== ""
+          ? body.serviceDescription.trim()
+          : null,
     })
     .select("*")
     .single();
@@ -115,6 +124,14 @@ export async function PATCH(request: NextRequest) {
   }
   if (typeof body.clientKey === "string" && body.clientKey.trim() !== "") {
     update.client_key = body.clientKey.trim();
+  }
+  if (body.serviceType !== undefined) {
+    if (!isServiceType(body.serviceType)) return errorJson("Tipo de servicio inválido", 400, "INVALID_SERVICE_TYPE");
+    update.service_type = body.serviceType;
+  }
+  if (typeof body.serviceDescription === "string" || body.serviceDescription === null) {
+    const description = typeof body.serviceDescription === "string" ? body.serviceDescription.trim() : "";
+    update.service_description = description || null;
   }
   if (body.rotateKey === true) update.client_key = generateClientKey();
   if (body.supportPolicy !== undefined) update.support_policy = parsePolicy(body.supportPolicy);

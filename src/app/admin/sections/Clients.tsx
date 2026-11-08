@@ -34,6 +34,7 @@ import {
   IconCopy,
   IconDots,
   IconFileDownload,
+  IconFileInvoice,
   IconPencil,
   IconPlus,
   IconSearch,
@@ -41,6 +42,9 @@ import {
 } from "@tabler/icons-react";
 import { api, notifyError, notifyOk } from "../lib/api";
 import { money, normalizeText, shortDate } from "../lib/format";
+
+// Tipos de servicio (ver SERVICE_TYPES en lib/billing/config.ts). Por ahora solo cobro recurrente.
+const SERVICE_TYPE_OPTIONS = [{ value: "recurring", label: "Cobro recurrente" }];
 
 type Invoice = { id: string; period: string; amount: number; currency: string; dueDate: string; status: string };
 type Status = { state: string; amountDue: number; periodLabel: string; dueDate: string; invoices: Invoice[] };
@@ -55,6 +59,8 @@ type Client = {
   active: boolean;
   start_period: string | null;
   notes: string | null;
+  service_type?: string | null;
+  service_description?: string | null;
   support_policy?: Record<string, string[]> | null;
   status: Status | null;
 };
@@ -179,6 +185,13 @@ export function Clients({
             href={`/api/admin/billing/notice?clientId=${client.id}`}
           >
             Aviso de cobro del mes (PDF)
+          </Menu.Item>
+          <Menu.Item
+            leftSection={<IconFileInvoice size={14} />}
+            component="a"
+            href={`/api/admin/billing/invoice?clientId=${client.id}`}
+          >
+            Factura del mes (PDF)
           </Menu.Item>
           <Menu.Item
             leftSection={<IconBrandWhatsapp size={14} />}
@@ -357,6 +370,8 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
     active: client?.active ?? true,
     clientKey: "",
     notes: client?.notes ?? "",
+    serviceType: client?.service_type ?? "recurring",
+    serviceDescription: client?.service_description ?? "",
   });
   const [preset, setPreset] = useState(
     POLICY_PRESETS.find((p) => samePolicy(p.policy, initialPolicy))?.value ?? "custom"
@@ -381,6 +396,8 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             startPeriod: form.startPeriod || null,
             active: form.active,
             notes: form.notes.trim() || null,
+            serviceType: form.serviceType,
+            serviceDescription: form.serviceDescription.trim() || null,
             ...(policy && !samePolicy(policy, initialPolicy) ? { supportPolicy: policy } : {}),
           },
         });
@@ -397,6 +414,8 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             startPeriod: form.startPeriod || null,
             clientKey: form.clientKey || undefined,
             notes: form.notes.trim() || null,
+            serviceType: form.serviceType,
+            serviceDescription: form.serviceDescription.trim() || null,
           },
         });
         notifyOk(`Cliente creado. KEY: ${data.client.client_key}`);
@@ -442,6 +461,23 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             <SegmentedControl value={form.currency} onChange={(v) => set({ currency: v })} data={["ARS", "USD"]} />
           </Stack>
         </SimpleGrid>
+        <Select
+          label="Servicio"
+          data={SERVICE_TYPE_OPTIONS}
+          value={form.serviceType}
+          allowDeselect={false}
+          onChange={(v) => v && set({ serviceType: v })}
+        />
+        <Textarea
+          label="Descripción en la factura"
+          description="Concepto que figura en la factura mensual. Si queda vacía se usa una genérica."
+          placeholder="Servicio mensual de mantenimiento, soporte técnico, actualizaciones y mejoras del sistema…"
+          autosize
+          minRows={2}
+          maxRows={4}
+          value={form.serviceDescription}
+          onChange={(e) => set({ serviceDescription: e.currentTarget.value })}
+        />
         <Textarea
           label="Contexto para prompts"
           description="Se agrega al prompt de cada ticket: proyecto, carpeta, repositorio, stack y agente."

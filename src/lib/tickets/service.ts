@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { findClientByKey } from "@/lib/subscription/service";
 import type { AdminSession } from "@/lib/admin/auth";
-import { notifyEvent } from "@/lib/notify/service";
+import { notifyEvent, notifyReporterStatus } from "@/lib/notify/service";
 import {
   allowedTypes,
   isTicketStatus,
@@ -253,20 +253,30 @@ export type PublicTicket = {
   title: string;
   status: TicketStatus;
   createdAt: string;
+  updatedAt: string;
   resolvedAt: string | null;
 };
 
 // Lo que ve el cliente de sus propios reportes: sin descripción ni notas internas, porque la
-// KEY viaja en el front y cualquiera con ella podría leerlos.
-export async function listClientTickets(clientKey: string): Promise<PublicTicket[]> {
+// KEY viaja en el front y cualquiera con ella podría leerlos. Con `reporter` se filtran los del
+// usuario que está mirando (así el aviso de "cambió de estado" le llega solo a quien lo cargó).
+export async function listClientTickets(
+  clientKey: string,
+  reporter: { ref?: string | null; email?: string | null } = {}
+): Promise<PublicTicket[]> {
   const { client } = await activeClientForKey(clientKey);
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  let query = supabase
     .from("tickets")
-    .select("number,type,title,status,created_at,resolved_at")
+    .select("number,type,title,status,created_at,updated_at,resolved_at")
     .eq("client_id", client.id)
     .order("created_at", { ascending: false })
     .limit(30);
+  const ref = reporter.ref?.trim();
+  const email = reporter.email?.trim().toLowerCase();
+  if (ref) query = query.eq("reporter_ref", ref.slice(0, 300));
+  else if (email) query = query.eq("reporter_email", email.slice(0, 300));
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map((row) => ({
     number: Number(row.number),
@@ -274,6 +284,7 @@ export async function listClientTickets(clientKey: string): Promise<PublicTicket
     title: row.title as string,
     status: row.status as TicketStatus,
     createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
     resolvedAt: (row.resolved_at as string | null) ?? null,
   }));
 }
@@ -359,7 +370,7 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
 async function ticketForMessage(id: string) {
   const { data } = await getSupabaseAdmin()
     .from("tickets")
-    .select("id,number,title,type,urgency,assignee_id,clients(name)")
+    .select("id,number,title,type,urgency,assignee_id,reporter_name,reporter_email,clients(name)")
     .eq("id", id)
     .maybeSingle();
   if (!data) return null;
@@ -374,6 +385,10 @@ async function ticketForMessage(id: string) {
       client_name: clients?.name ?? "-",
     },
     assigneeId: (data.assignee_id as string | null) ?? null,
+    reporter: {
+      name: (data.reporter_name as string | null) ?? null,
+      email: (data.reporter_email as string | null) ?? null,
+    },
   };
 }
 
@@ -474,6 +489,13 @@ export async function updateTicket(
     .single();
   if (error) throw error;
   for (const event of events) await recordActivity(id, actor, event.kind, null, event.meta);
+  // Al cliente que lo reportó le avisa el cambio de estado por correo (si dejó email).
+  if (update.status && update.status !== current.status) {
+    const info = await ticketForMessage(id);
+    if (info?.reporter.email) {
+      await notifyReporterStatus(info.ticket, info.reporter, current.status as TicketStatus, update.status as TicketStatus);
+    }
+  }
   const newAssignee = update.assignee_id as string | null | undefined;
   if (newAssignee && newAssignee !== current.assignee_id && newAssignee !== actor.userId) {
     const info = await ticketForMessage(id);

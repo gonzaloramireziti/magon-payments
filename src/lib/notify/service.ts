@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { notify } from "@/lib/env";
 import {
   buildMessage,
+  buildReporterStatusEmail,
   channelProblems,
   parseChannels,
   parseEvents,
@@ -175,5 +176,36 @@ export async function sendTest(userId: string, channel: Channel, rawChannels: un
   } catch (error) {
     await log({ userId, channel, event: "test", ticketId: null, ok: false, error: (error as Error).message });
     throw new NotifyError("SEND_FAILED", 502, `No se pudo enviar: ${(error as Error).message}`);
+  }
+}
+
+// Avisa por correo a quien cargó el reporte que cambió de estado. Solo si el reporte tiene email y
+// el correo está configurado; nunca hace fallar el cambio de estado.
+export async function notifyReporterStatus(
+  ticket: TicketForMessage,
+  reporter: { name: string | null; email: string | null },
+  from: string,
+  to: string
+): Promise<void> {
+  if (!reporter.email || from === to || !availableChannels().email) return;
+  const message = buildReporterStatusEmail(ticket, reporter.name, to);
+  try {
+    await post(
+      "https://api.resend.com/emails",
+      { from: notify.emailFrom, to: [reporter.email], subject: message.subject, text: message.text },
+      { authorization: `Bearer ${notify.resendApiKey}` }
+    );
+    await getSupabaseAdmin()
+      .from("notification_log")
+      .insert({ user_id: null, channel: "email", event: "reporter_status", ticket_id: ticket.id, ok: true });
+  } catch (error) {
+    await getSupabaseAdmin().from("notification_log").insert({
+      user_id: null,
+      channel: "email",
+      event: "reporter_status",
+      ticket_id: ticket.id,
+      ok: false,
+      error: (error as Error).message,
+    });
   }
 }

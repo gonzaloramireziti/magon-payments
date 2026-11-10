@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { DEFAULT_THEME, type MagonPayTheme } from "./types";
+import { detectChanges, parseState, rememberSubmitted, storageKey, type StatusChange, type WatchState } from "./supportWatch";
 
 export type MagonTicketType = "bug" | "feature";
 export type MagonTicketUrgency = "low" | "medium" | "high" | "critical";
@@ -64,6 +65,8 @@ export type MagonSupportLabels = {
   loading: string;
   noTickets: string;
   disabled: string;
+  updatesTitle: string;
+  updatesView: string;
   urgency: Record<MagonTicketUrgency, string>;
   status: Record<MagonTicketStatus, string>;
 };
@@ -94,6 +97,8 @@ export const DEFAULT_SUPPORT_LABELS: MagonSupportLabels = {
   loading: "Cargando...",
   noTickets: "Todavía no cargaste reportes.",
   disabled: "Los reportes no están habilitados para esta cuenta.",
+  updatesTitle: "Novedades de tus reportes",
+  updatesView: "Ver mis reportes",
   urgency: {
     low: "Puedo seguir trabajando normalmente",
     medium: "Me complica, pero puedo seguir",
@@ -128,8 +133,15 @@ export type MagonSupportProps = {
   hideTrigger?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  renderTrigger?: (open: () => void) => ReactNode;
+  /** Botón propio. `info.unseen` es la cantidad de reportes que cambiaron de estado y el usuario no vio. */
+  renderTrigger?: (open: () => void, info: { unseen: number }) => ReactNode;
   onSubmitted?: (ticket: { id: string; number: number }) => void;
+  /**
+   * Cada cuánto revisa si cambió el estado de los reportes del usuario (ms). Por defecto 60 s;
+   * 0 lo apaga. Cuando cambia alguno, muestra un aviso en pantalla y marca el botón.
+   */
+  watchIntervalMs?: number;
+  onStatusChange?: (changes: StatusChange[]) => void;
 };
 
 type Config = { clientName: string; channel: string; types: MagonTicketType[] };
@@ -171,6 +183,8 @@ export function MagonSupport(props: MagonSupportProps) {
     onOpenChange,
     renderTrigger,
     onSubmitted,
+    watchIntervalMs = 60_000,
+    onStatusChange,
   } = props;
 
   const t = { ...DEFAULT_THEME, ...theme };
@@ -206,6 +220,80 @@ export function MagonSupport(props: MagonSupportProps) {
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<number | null>(null);
   const [mine, setMine] = useState<MagonClientTicket[] | null>(null);
+  const [changes, setChanges] = useState<StatusChange[]>([]);
+  const [toastVisible, setToastVisible] = useState(false);
+
+  // Identidad de quien mira: filtra en el server los reportes que cargó él. Sin identidad,
+  // se siguen solo los cargados desde este navegador.
+  const reporterId = reporter?.id != null && String(reporter.id) !== "" ? String(reporter.id) : null;
+  const reporterEmail = reporter?.email ? String(reporter.email) : null;
+  const watchKey = storageKey(clientKey, { id: reporterId, email: reporterEmail });
+  const ticketsUrl = (() => {
+    const params = new URLSearchParams({ key: clientKey });
+    if (reporterId) params.set("reporterRef", reporterId);
+    else if (reporterEmail) params.set("reporterEmail", reporterEmail);
+    return `${base}/api/support/tickets?${params.toString()}`;
+  })();
+
+  const readWatch = useCallback((): WatchState => {
+    try {
+      return parseState(window.localStorage.getItem(watchKey));
+    } catch {
+      return parseState(null);
+    }
+  }, [watchKey]);
+  const writeWatch = useCallback(
+    (state: WatchState) => {
+      try {
+        window.localStorage.setItem(watchKey, JSON.stringify(state));
+      } catch {
+        /* sin almacenamiento: se avisa igual mientras la página esté abierta */
+      }
+    },
+    [watchKey]
+  );
+
+  const checkUpdates = useCallback(async () => {
+    try {
+      const response = await fetch(ticketsUrl, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok || !data.ok) return;
+      const result = detectChanges(readWatch(), data.tickets as MagonClientTicket[], !reporterId && !reporterEmail);
+      writeWatch(result.next);
+      if (result.changes.length === 0) return;
+      setChanges((current) => {
+        const others = current.filter((c) => !result.changes.some((n) => n.number === c.number));
+        return [...result.changes, ...others].slice(0, 10);
+      });
+      setToastVisible(true);
+      onStatusChange?.(result.changes);
+    } catch {
+      /* sin conexión: se reintenta en la próxima vuelta */
+    }
+  }, [ticketsUrl, readWatch, writeWatch, reporterId, reporterEmail, onStatusChange]);
+
+  useEffect(() => {
+    if (!watchIntervalMs || watchIntervalMs <= 0) return;
+    void checkUpdates();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") void checkUpdates();
+    }, Math.max(15_000, watchIntervalMs));
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void checkUpdates();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [watchIntervalMs, checkUpdates]);
+
+  // El aviso flotante se va solo; la marca del botón queda hasta que abra "Mis reportes".
+  useEffect(() => {
+    if (!toastVisible) return;
+    const timer = window.setTimeout(() => setToastVisible(false), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [toastVisible, changes]);
 
   useEffect(() => {
     if (!isOpen || config) return;
@@ -223,14 +311,32 @@ export function MagonSupport(props: MagonSupportProps) {
   useEffect(() => {
     if (!isOpen || tab !== "mine") return;
     setMine(null);
-    fetch(`${base}/api/support/tickets?key=${encodeURIComponent(clientKey)}`, { cache: "no-store" })
+    fetch(ticketsUrl, { cache: "no-store" })
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
-        setMine(data.tickets as MagonClientTicket[]);
+        const tickets = data.tickets as MagonClientTicket[];
+        const onlyMine = !reporterId && !reporterEmail;
+        const state = readWatch();
+        setMine(onlyMine ? tickets.filter((t) => state.mine.includes(t.number)) : tickets);
+        // Al mirar la lista quedan vistos: se actualiza el último estado conocido.
+        writeWatch(detectChanges(state, tickets, onlyMine).next);
       })
       .catch(() => setMine([]));
-  }, [isOpen, tab, base, clientKey, sent]);
+  }, [isOpen, tab, ticketsUrl, sent, readWatch, writeWatch, reporterId, reporterEmail]);
+
+  // Lo que cambió se marca como visto cuando cierra la ventana después de ver "Mis reportes".
+  const [highlight, setHighlight] = useState<number[]>([]);
+  useEffect(() => {
+    if (isOpen && tab === "mine" && changes.length) {
+      setHighlight(changes.map((c) => c.number));
+      setChanges([]);
+      setToastVisible(false);
+    }
+  }, [isOpen, tab, changes]);
+  useEffect(() => {
+    if (!isOpen) setHighlight([]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -294,6 +400,7 @@ export function MagonSupport(props: MagonSupportProps) {
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
       setSent(data.ticket.number as number);
+      writeWatch(rememberSubmitted(readWatch(), data.ticket.number as number));
       onSubmitted?.(data.ticket);
     } catch (err) {
       setError((err as Error).message);
@@ -334,12 +441,42 @@ export function MagonSupport(props: MagonSupportProps) {
   };
   const types = config?.types ?? [];
 
+  const unseen = changes.length;
+  const openMine = () => {
+    setTab("mine");
+    setOpen(true);
+  };
+  const badge = unseen > 0 && (
+    <span
+      aria-label={`${unseen} novedad(es)`}
+      style={{
+        position: "absolute",
+        top: -6,
+        right: -6,
+        minWidth: 20,
+        height: 20,
+        padding: "0 5px",
+        borderRadius: 999,
+        background: t.danger,
+        color: "#fff",
+        fontSize: 11,
+        fontWeight: 700,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxSizing: "border-box",
+      }}
+    >
+      {unseen}
+    </span>
+  );
+
   const trigger = renderTrigger ? (
-    renderTrigger(() => setOpen(true))
+    renderTrigger(() => (unseen ? openMine() : setOpen(true)), { unseen })
   ) : hideTrigger ? null : (
     <button
       type="button"
-      onClick={() => setOpen(true)}
+      onClick={() => (unseen ? openMine() : setOpen(true))}
       aria-label={l.title}
       style={{
         ...primary,
@@ -353,12 +490,60 @@ export function MagonSupport(props: MagonSupportProps) {
       }}
     >
       {l.trigger}
+      {badge}
     </button>
+  );
+
+  const side = position === "bottom-left" ? "left" : "right";
+  const toast = toastVisible && changes.length > 0 && !isOpen && (
+    <div
+      role="status"
+      style={{
+        position: "fixed",
+        bottom: hideTrigger || renderTrigger ? 20 : 76,
+        [side]: 20,
+        zIndex: 2147483000,
+        width: "min(360px, calc(100vw - 40px))",
+        background: t.surface,
+        color: t.text,
+        border: `1px solid ${t.border}`,
+        borderRadius: t.radius,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+        padding: "12px 14px",
+        fontFamily: t.fontFamily,
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <strong style={{ fontSize: 14 }}>{l.updatesTitle}</strong>
+        <button
+          type="button"
+          onClick={() => setToastVisible(false)}
+          aria-label={l.close}
+          style={{ background: "transparent", border: "none", color: t.muted, cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+        >
+          ✕
+        </button>
+      </div>
+      <div style={{ display: "grid", gap: 4, margin: "8px 0 10px" }}>
+        {changes.slice(0, 3).map((change) => (
+          <div key={change.number} style={{ fontSize: 13 }}>
+            #{change.number} {change.title.length > 48 ? `${change.title.slice(0, 48)}…` : change.title} →{" "}
+            <b>{l.status[change.to as MagonTicketStatus] ?? change.to}</b>
+          </div>
+        ))}
+        {changes.length > 3 && <div style={{ fontSize: 12, color: t.muted }}>y {changes.length - 3} más</div>}
+      </div>
+      <button type="button" onClick={openMine} style={{ ...primary, padding: "8px 12px", fontSize: 13 }}>
+        {l.updatesView}
+      </button>
+    </div>
   );
 
   return (
     <>
       {trigger}
+      {toast}
       {isOpen && (
         <div
           role="dialog"
@@ -425,7 +610,11 @@ export function MagonSupport(props: MagonSupportProps) {
                 {mine?.map((ticket) => (
                   <div
                     key={ticket.number}
-                    style={{ border: `1px solid ${t.border}`, borderRadius: Math.max(6, t.radius - 6), padding: "10px 12px" }}
+                    style={{
+                      border: `1px solid ${highlight.includes(ticket.number) ? t.text : t.border}`,
+                      borderRadius: Math.max(6, t.radius - 6),
+                      padding: "10px 12px",
+                    }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: t.muted }}>
                       <span>

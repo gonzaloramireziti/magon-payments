@@ -32,3 +32,4 @@ export type {
   MagonTicketUrgency,
   MagonTicketStatus,
 } from "./MagonSupport";
+export type { StatusChange as MagonTicketStatusChange } from "./supportWatch";

@@ -136,3 +136,48 @@ export function buildMessage(event: NotifyEvent | "test", ticket: TicketForMessa
     text: `💬 ${ctx.actorName ?? "Alguien"} comentó en el ticket ${head}\n${ticket.title}\n«${comment}»\n${link}`,
   };
 }
+
+// Estados como los ve el cliente (mismos textos que "Mis reportes" del botón de reportes).
+export const CLIENT_STATUS_LABEL: Record<string, string> = {
+  new: "Recibido",
+  analysis: "En análisis",
+  ready: "Planificado",
+  in_progress: "En desarrollo",
+  testing: "En prueba",
+  done: "Resuelto",
+  discarded: "Cerrado",
+};
+
+const STATUS_DETAIL: Record<string, string> = {
+  analysis: "Ya lo estamos revisando.",
+  ready: "Ya está planificado para resolverlo.",
+  in_progress: "Lo estamos resolviendo.",
+  testing: "Lo estamos probando antes de publicarlo.",
+  done: "Ya está resuelto. Si ves que sigue pasando, cargá un reporte nuevo desde el mismo botón.",
+  discarded: "Lo cerramos sin cambios. Si tenés dudas, respondé este correo.",
+  new: "Lo recibimos de nuevo y lo vamos a revisar.",
+};
+
+export function buildReporterStatusEmail(
+  ticket: Pick<TicketForMessage, "number" | "title" | "client_name">,
+  reporterName: string | null,
+  to: string
+) {
+  const label = CLIENT_STATUS_LABEL[to] ?? to;
+  const hello = reporterName?.trim() ? `Hola ${reporterName.trim().split(/\s+/)[0]},` : "Hola,";
+  return {
+    subject: `Tu reporte #${ticket.number} está ${label.toLowerCase()}`,
+    text: [
+      hello,
+      "",
+      `Tu reporte #${ticket.number} «${ticket.title}» cambió de estado: ahora está ${label.toUpperCase()}.`,
+      STATUS_DETAIL[to] ?? "",
+      "",
+      "Podés seguirlo desde el botón «Reportar» de tu sistema, en la pestaña «Mis reportes».",
+      "",
+      "Equipo de Magon",
+    ]
+      .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
+      .join("\n"),
+  };
+}

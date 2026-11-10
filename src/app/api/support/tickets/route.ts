@@ -53,7 +53,12 @@ export async function GET(request: NextRequest) {
   const clientKey = getClientKeyFromRequest(request);
   if (!clientKey) return errorJson("Falta la KEY del cliente", 400, "MISSING_KEY");
   try {
-    return okJson({ tickets: await listClientTickets(clientKey) });
+    const params = request.nextUrl.searchParams;
+    const tickets = await listClientTickets(clientKey, {
+      ref: params.get("reporterRef"),
+      email: params.get("reporterEmail"),
+    });
+    return okJson({ tickets });
   } catch (error) {
     return handleError(error);
   }

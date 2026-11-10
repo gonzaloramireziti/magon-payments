@@ -51,6 +51,10 @@ npm run dev                  # http://localhost:3000
 > el tipo de servicio (`service_type`, por ahora solo `recurring` = Cobro recurrente) y la
 > descripción que figura en la factura (`service_description`).
 
+> Para cargar tickets a mano desde el tablero, ejecutá `supabase/migrations/008_manual_tickets.sql`:
+> habilita en la actividad del ticket el registro de quién lo cargó. Sin esta migración la carga
+> manual funciona igual, pero no queda esa línea en la actividad.
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno
@@ -144,6 +148,7 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `POST` | `/api/payments/create` | Crea el pago. Body `{ "clientKey": "..." }` |
 | `POST` | `/api/webhooks/galiopay` | Webhook de GalioPay (idempotente) |
 | `GET/POST/PATCH/DELETE` | `/api/admin/clients` | Alta/edición/borrado de clientes (sesión del panel o `x-admin-key`) |
+| `POST` | `/api/admin/tickets` | Carga manual de un ticket desde el panel (multipart con capturas en `attachments`, o JSON) |
 | `POST` | `/api/admin/payments` | Confirma un pago manual (efectivo/transferencia externa) |
 | `GET/POST/PATCH/DELETE` | `/api/admin/costs` | Costos fijos mensuales (ARS/USD) |
 | `GET` | `/api/admin/dashboard?period=month\|all` | Ganancias, costos, deuda y cotización |
@@ -170,7 +175,13 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    (toggle USD ⇄ ARS), costos fijos mensuales, **ganancia final mensual** y deuda actual.
    Muestra además lo cobrado en el mes.
 5. **Costos fijos:** sección para cargar/editar/borrar costos en ARS o USD; se suman al total convertido.
-6. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
+6. **Cargar ticket a mano:** botón «Nuevo ticket» en el Tablero para pedidos que llegan por WhatsApp,
+   correo, llamada o reunión. Se elige el cliente, el tipo, por dónde llegó, la columna inicial,
+   responsable, etiquetas y hasta 3 capturas (se pueden pegar con Ctrl + V). La descripción admite
+   hasta 20.000 caracteres y «Limpiar formato de WhatsApp» saca fecha, hora y nombre de cada mensaje
+   de una conversación copiada o exportada. No aplica la política de tipos del cliente ni el límite
+   por hora del widget. El borrador queda guardado en el navegador hasta que se carga o se vacía.
+7. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
 
 ### Definir un cliente (API)
 

@@ -41,6 +41,7 @@ import {
   IconHandGrab,
   IconHandOff,
   IconMessage,
+  IconPencilPlus,
   IconTag,
   IconUser,
 } from "@tabler/icons-react";
@@ -52,6 +53,7 @@ import {
   STATUS_LABEL,
   TYPE,
   URGENCY,
+  sourceLabel,
   type Activity,
   type Me,
   type PanelUser,
@@ -106,6 +108,16 @@ function activityText(item: Activity): React.ReactNode {
       </>
     );
   }
+  if (item.kind === "created") {
+    const channel = typeof (item.meta as { channel?: unknown }).channel === "string" ? String(item.meta.channel) : null;
+    return channel ? (
+      <>
+        cargó el ticket a mano (llegó por <b>{sourceLabel(channel)}</b>)
+      </>
+    ) : (
+      <>cargó el ticket a mano</>
+    );
+  }
   if (item.kind === "labels") {
     const labels = (meta.to as string[]) ?? [];
     return labels.length ? (
@@ -125,6 +137,7 @@ const ACTIVITY_ICON = {
   assignee: IconUser,
   urgency: IconFlag,
   labels: IconTag,
+  created: IconPencilPlus,
 };
 
 export function TicketDrawer({
@@ -257,7 +270,7 @@ export function TicketDrawer({
             <Badge color={type.color}>{type.label}</Badge>
             <Text size="sm" c="dimmed">
               #{ticket.number} · {ticket.client_name}
-              {ticket.channel !== "default" ? ` (${ticket.channel})` : ""}
+              {ticket.channel !== "default" ? ` (${sourceLabel(ticket.channel)})` : ""}
             </Text>
           </Group>
           <Drawer.CloseButton />

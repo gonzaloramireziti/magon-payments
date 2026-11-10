@@ -32,6 +32,7 @@ import {
   IconArrowsSort,
   IconLayoutKanban,
   IconList,
+  IconPlus,
   IconRefresh,
   IconSearch,
   IconX,
@@ -62,6 +63,7 @@ import {
   type SortKey,
 } from "./filter";
 import { TicketCard } from "./TicketCard";
+import { NewTicketModal, type ClientOption } from "./NewTicketModal";
 
 export type TicketChanges = Partial<{
   status: TicketStatus;
@@ -114,14 +116,18 @@ export function Board({
   tickets,
   state,
   users,
+  clientOptions,
   onPatch,
   reload,
+  onCreated,
   setOpenTicketId,
 }: {
   me: Me;
   tickets: Ticket[];
   state: "loading" | "ready" | "unavailable";
   users: PanelUser[];
+  clientOptions: ClientOption[];
+  onCreated: (id: string) => Promise<void>;
   onPatch: (id: string, changes: TicketChanges) => Promise<void>;
   reload: () => Promise<void>;
   setOpenTicketId: (id: string | null) => void;
@@ -134,6 +140,7 @@ export function Board({
   const [overColumn, setOverColumn] = useState<TicketStatus | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "urgency", desc: false });
   const [refreshing, setRefreshing] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [search] = useDebouncedValue(filters.search, 150);
 
   useEffect(() => {
@@ -299,6 +306,11 @@ export function Board({
           </Text>
         </div>
         <Group gap="xs" wrap="nowrap">
+          <Tooltip label="Para pedidos que llegan por WhatsApp, correo o llamada" disabled={Boolean(mobile)}>
+            <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setCreating(true)}>
+              {mobile ? "Nuevo" : "Nuevo ticket"}
+            </Button>
+          </Tooltip>
           <SegmentedControl
             size="xs"
             value={view}
@@ -373,6 +385,16 @@ export function Board({
           filterControls
         )}
       </Group>
+
+      <NewTicketModal
+        opened={creating}
+        onClose={() => setCreating(false)}
+        me={me}
+        clients={clientOptions}
+        users={users}
+        labelOptions={labels}
+        onCreated={onCreated}
+      />
 
       <Drawer opened={filtersOpen} onClose={() => setFiltersOpen(false)} position="bottom" title="Filtros" size="auto">
         <Stack gap="sm" pb="md">

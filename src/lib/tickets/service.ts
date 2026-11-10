@@ -13,6 +13,7 @@ import {
   parsePolicy,
   resolvedAtFor,
   validateAttachments,
+  validateManualTicketInput,
   validateTicketInput,
   type TicketStatus,
   type TicketType,
@@ -176,6 +177,76 @@ export async function createTicket(
   return created;
 }
 
+// Alta desde el panel: pedidos que llegan por WhatsApp, mail, llamada... Lo carga un usuario del
+// equipo, así que no pasa por la política de tipos del cliente ni por el límite por hora.
+export async function createManualTicket(
+  raw: Record<string, unknown>,
+  files: File[],
+  actor: AdminSession
+): Promise<{ id: string; number: number }> {
+  const validation = validateManualTicketInput(raw);
+  if (!validation.ok) throw new TicketError(validation.code, 400, validation.message);
+  const input = validation.value;
+
+  const attachmentError = validateAttachments(files);
+  if (attachmentError) throw new TicketError("INVALID_ATTACHMENTS", 400, attachmentError);
+
+  const supabase = getSupabaseAdmin();
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("id,name")
+    .eq("id", input.clientId)
+    .maybeSingle();
+  if (clientError) throw clientError;
+  if (!client) throw new TicketError("CLIENT_NOT_FOUND", 404, "Cliente no encontrado");
+
+  if (input.assigneeId && !(await userName(input.assigneeId))) {
+    throw new TicketError("INVALID_ASSIGNEE", 400, "Ese usuario no existe");
+  }
+
+  const attachments = await uploadAttachments(client.id as string, files);
+  const { data, error } = await supabase
+    .from("tickets")
+    .insert({
+      client_id: client.id,
+      channel: input.channel,
+      type: input.type,
+      title: input.title,
+      description: input.description,
+      expected: input.expected,
+      actual: input.actual,
+      urgency: input.urgency,
+      status: input.status,
+      position: -Date.now(),
+      reporter_name: input.reporterName,
+      reporter_email: input.reporterEmail,
+      reporter_ref: input.reporterRef,
+      attachments,
+      assignee_id: input.assigneeId,
+      labels: input.labels,
+    })
+    .select("id,number")
+    .single();
+  if (error) throw error;
+
+  const created = { id: data.id as string, number: Number(data.number) };
+  await recordActivity(created.id, actor, "created", null, { channel: input.channel });
+
+  const message = {
+    ...created,
+    title: input.title,
+    type: input.type,
+    urgency: input.urgency,
+    client_name: client.name as string,
+  };
+  // Quien lo cargó ya lo sabe: el aviso va al resto del equipo.
+  await notifyEvent("new_ticket", message, { exceptUserId: actor.userId, actorName: actor.name });
+  if (input.assigneeId && input.assigneeId !== actor.userId) {
+    await notifyEvent("assigned", message, { onlyUserId: input.assigneeId, actorName: actor.name });
+  }
+  return created;
+}
+
 export type PublicTicket = {
   number: number;
   type: TicketType;
@@ -306,7 +377,7 @@ async function ticketForMessage(id: string) {
   };
 }
 
-type ActivityKind = "comment" | "status" | "assignee" | "urgency" | "labels";
+type ActivityKind = "comment" | "status" | "assignee" | "urgency" | "labels" | "created";
 
 async function recordActivity(
   ticketId: string,

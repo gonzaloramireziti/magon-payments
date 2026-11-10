@@ -147,6 +147,92 @@ export function validateTicketInput(
   };
 }
 
+// --- Carga manual desde el panel -------------------------------------------------------------
+// Pedidos que el cliente manda por fuera del widget (WhatsApp, mail, llamada, reunión). La carga
+// un usuario del panel: no aplica la política de tipos del cliente ni el límite por hora, y la
+// descripción admite textos más largos porque suelen ser conversaciones pegadas enteras.
+
+export const MANUAL_SOURCES = ["whatsapp", "email", "llamada", "reunion", "manual"] as const;
+export type ManualSource = (typeof MANUAL_SOURCES)[number];
+
+export const MANUAL_TEXT_LIMIT = 20000;
+
+// Estados posibles al cargar: cualquier columna abierta (a veces ya está analizado o listo).
+export const MANUAL_INITIAL_STATUSES = ["new", "analysis", "ready", "in_progress"] as const;
+
+export type ManualTicketInput = Omit<TicketInput, "pageUrl" | "userAgent" | "appVersion"> & {
+  clientId: string;
+  status: TicketStatus;
+  assigneeId: string | null;
+  labels: string[];
+};
+
+export type ManualValidationResult =
+  | { ok: true; value: ManualTicketInput }
+  | { ok: false; code: string; message: string };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Las etiquetas pueden venir como arreglo (JSON) o como texto JSON (multipart).
+function labelsFrom(raw: unknown): string[] {
+  if (typeof raw === "string") {
+    try {
+      return normalizeLabels(JSON.parse(raw));
+    } catch {
+      return normalizeLabels(raw.split(","));
+    }
+  }
+  return normalizeLabels(raw);
+}
+
+export function validateManualTicketInput(raw: Record<string, unknown>): ManualValidationResult {
+  const clientId = typeof raw.clientId === "string" ? raw.clientId.trim() : "";
+  if (!UUID.test(clientId)) return { ok: false, code: "MISSING_CLIENT", message: "Elegí el cliente" };
+
+  if (!isTicketType(raw.type)) {
+    return { ok: false, code: "INVALID_TYPE", message: "El tipo de ticket no es válido" };
+  }
+
+  const title = text(raw.title, LIMITS.title);
+  const description = text(raw.description, MANUAL_TEXT_LIMIT);
+  if (!title) return { ok: false, code: "MISSING_TITLE", message: "Falta el título" };
+  if (!description) return { ok: false, code: "MISSING_DESCRIPTION", message: "Falta la descripción" };
+
+  const source = typeof raw.channel === "string" ? raw.channel.trim().toLowerCase() : "";
+  const channel = (MANUAL_SOURCES as readonly string[]).includes(source) ? source : "manual";
+
+  const status = (MANUAL_INITIAL_STATUSES as readonly string[]).includes(raw.status as string)
+    ? (raw.status as TicketStatus)
+    : "new";
+
+  const assigneeRaw = typeof raw.assigneeId === "string" ? raw.assigneeId.trim() : "";
+  if (assigneeRaw && !UUID.test(assigneeRaw)) {
+    return { ok: false, code: "INVALID_ASSIGNEE", message: "Ese usuario no existe" };
+  }
+
+  const email = text(raw.reporterEmail, LIMITS.short);
+
+  return {
+    ok: true,
+    value: {
+      clientId,
+      channel,
+      type: raw.type,
+      title,
+      description,
+      expected: raw.type === "bug" ? text(raw.expected, LIMITS.text) : null,
+      actual: raw.type === "bug" ? text(raw.actual, LIMITS.text) : null,
+      urgency: isTicketUrgency(raw.urgency) ? raw.urgency : "medium",
+      status,
+      assigneeId: assigneeRaw || null,
+      labels: labelsFrom(raw.labels),
+      reporterName: text(raw.reporterName, LIMITS.short),
+      reporterEmail: email && email.includes("@") ? email : null,
+      reporterRef: text(raw.reporterRef, LIMITS.short),
+    },
+  };
+}
+
 export type AttachmentCandidate = { name: string; type: string; size: number };
 
 export function validateAttachments(files: AttachmentCandidate[]): string | null {

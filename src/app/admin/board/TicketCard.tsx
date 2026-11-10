@@ -4,7 +4,7 @@ import type { DragEvent } from "react";
 import { ActionIcon, Avatar, Badge, Button, Group, Menu, Paper, Stack, Text, Tooltip } from "@mantine/core";
 import { IconBug, IconBulb, IconDots, IconHandGrab } from "@tabler/icons-react";
 import { initials, relative } from "../lib/format";
-import { COLUMNS, STATUS_LABEL, TYPE, URGENCY, type Me, type Ticket, type TicketStatus } from "../lib/tickets";
+import { COLUMNS, STATUS_LABEL, TYPE, URGENCY, sourceLabel, type Me, type Ticket, type TicketStatus } from "../lib/tickets";
 
 export function TicketCard({
   ticket,
@@ -112,7 +112,7 @@ export function TicketCard({
         <Group justify="space-between" gap={6} wrap="nowrap">
           <Text size="xs" c="dimmed" truncate>
             {ticket.client_name}
-            {ticket.channel !== "default" ? ` · ${ticket.channel}` : ""} · {relative(ticket.created_at)}
+            {ticket.channel !== "default" ? ` · ${sourceLabel(ticket.channel)}` : ""} · {relative(ticket.created_at)}
           </Text>
           {ticket.assignee_name ? (
             <Tooltip label={mine ? "Asignado a vos" : `Asignado a ${ticket.assignee_name}`}>

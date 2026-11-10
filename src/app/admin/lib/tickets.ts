@@ -34,7 +34,7 @@ export type Ticket = {
 
 export type Activity = {
   id: string;
-  kind: "comment" | "status" | "assignee" | "urgency" | "labels";
+  kind: "comment" | "status" | "assignee" | "urgency" | "labels" | "created";
   authorName: string | null;
   body: string | null;
   meta: Record<string, unknown>;
@@ -108,6 +108,19 @@ export const LABEL_SUGGESTIONS = [
   "whatsapp",
   "pdf",
 ];
+
+// Por dónde llegó un ticket cargado a mano desde el panel.
+export const MANUAL_SOURCES: Array<{ value: string; label: string }> = [
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "Correo" },
+  { value: "llamada", label: "Llamada" },
+  { value: "reunion", label: "Reunión" },
+  { value: "manual", label: "Otro" },
+];
+
+export function sourceLabel(channel: string): string {
+  return MANUAL_SOURCES.find((source) => source.value === channel)?.label ?? channel;
+}
 
 export function isClosed(status: TicketStatus): boolean {
   return status === "done" || status === "discarded";

@@ -93,7 +93,7 @@ export function AdminApp({ me }: { me: Me }) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketsState, setTicketsState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [users, setUsers] = useState<PanelUser[]>([]);
-  const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null }>>([]);
+  const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null; active?: boolean }>>([]);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [clientFocus, setClientFocus] = useState<string | null>(null);
   const [unseen, setUnseen] = useState<Summary[]>([]);
@@ -155,7 +155,7 @@ export function AdminApp({ me }: { me: Me }) {
   useEffect(() => {
     void loadTickets();
     void loadUsers();
-    api<{ clients: Array<{ id: string; name: string; notes: string | null }> }>("/api/admin/clients")
+    api<{ clients: Array<{ id: string; name: string; notes: string | null; active?: boolean }> }>("/api/admin/clients")
       .then((data) => setClients(data.clients))
       .catch(() => setClients([]));
   }, [loadTickets, loadUsers]);
@@ -224,6 +224,16 @@ export function AdminApp({ me }: { me: Me }) {
       }
     },
     [users]
+  );
+
+  // Ticket cargado a mano: se marca como visto (no suena el aviso de "nuevo") y se abre.
+  const onTicketCreated = useCallback(
+    async (id: string) => {
+      lastSnapshot.current?.set(id, "");
+      await loadTickets();
+      setOpenTicketId(id);
+    },
+    [loadTickets]
   );
 
   useHotkeys([["mod+K", () => spotlight.open()]]);
@@ -486,8 +496,10 @@ export function AdminApp({ me }: { me: Me }) {
             tickets={tickets}
             state={ticketsState}
             users={users}
+            clientOptions={clients}
             onPatch={patchTicket}
             reload={loadTickets}
+            onCreated={onTicketCreated}
             setOpenTicketId={(id) => {
               setOpenTicketId(id);
               if (id) setUnseen((current) => current.filter((t) => t.id !== id));

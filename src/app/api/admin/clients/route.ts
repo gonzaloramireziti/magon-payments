@@ -5,6 +5,7 @@ import { isAdminRequest } from "@/lib/admin/auth";
 import { getSubscriptionStatus } from "@/lib/subscription/service";
 import { parsePolicy } from "@/lib/tickets/policy";
 import { isServiceType } from "@/lib/billing/config";
+import { normalizeRepos } from "@/lib/integrations/repos";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -86,6 +87,8 @@ export async function POST(request: NextRequest) {
         typeof body.serviceDescription === "string" && body.serviceDescription.trim() !== ""
           ? body.serviceDescription.trim()
           : null,
+      // Solo si viene: así el alta no depende de que esté corrida la migración 009.
+      ...(Array.isArray(body.repos) ? { repos: normalizeRepos(body.repos) } : {}),
     })
     .select("*")
     .single();
@@ -135,6 +138,7 @@ export async function PATCH(request: NextRequest) {
   }
   if (body.rotateKey === true) update.client_key = generateClientKey();
   if (body.supportPolicy !== undefined) update.support_policy = parsePolicy(body.supportPolicy);
+  if (Array.isArray(body.repos)) update.repos = normalizeRepos(body.repos);
 
   if (Object.keys(update).length === 0) {
     return errorJson("Nada para actualizar", 400, "EMPTY_UPDATE");

@@ -42,6 +42,7 @@ import {
   IconHandOff,
   IconMessage,
   IconPencilPlus,
+  IconRobot,
   IconTag,
   IconUser,
 } from "@tabler/icons-react";
@@ -63,6 +64,7 @@ import {
 } from "../lib/tickets";
 import type { TicketChanges } from "./Board";
 import { buildTicketPrompt } from "./prompt";
+import { AgentPanel } from "./AgentPanel";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -118,6 +120,15 @@ function activityText(item: Activity): React.ReactNode {
       <>cargó el ticket a mano</>
     );
   }
+  if (item.kind === "triage") {
+    const verdict = (item.meta as { verdict?: string }).verdict;
+    return (
+      <>
+        analizó el ticket con Claude: <b>{verdict === "direct" ? "directo" : "necesita decisión"}</b>
+      </>
+    );
+  }
+  if (item.kind === "decision") return <>respondió preguntas del análisis</>;
   if (item.kind === "labels") {
     const labels = (meta.to as string[]) ?? [];
     return labels.length ? (
@@ -138,6 +149,8 @@ const ACTIVITY_ICON = {
   urgency: IconFlag,
   labels: IconTag,
   created: IconPencilPlus,
+  triage: IconRobot,
+  decision: IconCircleCheck,
 };
 
 export function TicketDrawer({
@@ -148,6 +161,7 @@ export function TicketDrawer({
   clientContext,
   onClose,
   onChange,
+  onLocalUpdate,
 }: {
   ticket: Ticket | null;
   me: Me;
@@ -156,6 +170,7 @@ export function TicketDrawer({
   clientContext: string | null;
   onClose: () => void;
   onChange: (id: string, changes: TicketChanges) => Promise<void>;
+  onLocalUpdate: (id: string, changes: Partial<Ticket>) => void;
 }) {
   const mobile = useMediaQuery("(max-width: 48em)");
   const [tab, setTab] = useState<string | null>("detalle");
@@ -246,6 +261,8 @@ export function TicketDrawer({
   }
 
   const closed = ticket.status === "done" || ticket.status === "discarded";
+  const openQuestions =
+    ticket.triage?.questions.filter((q) => !(ticket.decisions ?? []).some((d) => d.questionId === q.id)).length ?? 0;
 
   function openPrompt(withComments = includeComments) {
     setPrompt(
@@ -358,6 +375,12 @@ export function TicketDrawer({
               <Text size="xs" c="yellow.8">
                 {ticket.client_name} no tiene contexto técnico cargado. Agregalo en Clientes → Editar → «Contexto para
                 prompts» (proyecto, carpeta, stack, agente) y el prompt lo va a incluir.
+              </Text>
+            )}
+            {openQuestions > 0 && (
+              <Text size="xs" c="yellow.8">
+                El análisis dejó {openQuestions} pregunta(s) sin responder. Respondelas en la pestaña Agente para que
+                vayan en el prompt.
               </Text>
             )}
             <Switch
@@ -475,6 +498,9 @@ export function TicketDrawer({
       <Tabs value={tab} onChange={setTab}>
         <Tabs.List px="md">
           <Tabs.Tab value="detalle">Detalle</Tabs.Tab>
+          <Tabs.Tab value="agente" leftSection={<IconRobot size={14} />}>
+            Agente
+          </Tabs.Tab>
           <Tabs.Tab value="actividad" rightSection={comments ? <Badge size="xs" circle>{comments}</Badge> : null}>
             Actividad
           </Tabs.Tab>
@@ -543,6 +569,17 @@ export function TicketDrawer({
           </Stack>
         </Tabs.Panel>
 
+        <Tabs.Panel value="agente" p="md">
+          <AgentPanel
+            ticket={ticket}
+            me={me}
+            onUpdated={(changes) => {
+              onLocalUpdate(ticket.id, changes);
+              void loadActivity();
+            }}
+          />
+        </Tabs.Panel>
+
         <Tabs.Panel value="actividad" p="md">
           <Stack gap="md">
             <Paper p="sm">
@@ -600,7 +637,7 @@ export function TicketDrawer({
                         <b>{item.authorName ?? "Alguien"}</b>{" "}
                         {item.kind === "comment" ? "comentó" : activityText(item)}
                       </Text>
-                      {item.kind === "comment" && item.body && (
+                      {(item.kind === "comment" || item.kind === "triage" || item.kind === "decision") && item.body && (
                         <Paper p="xs" mt={4} bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))">
                           <Prose value={item.body} />
                         </Paper>

@@ -31,11 +31,25 @@ export type Ticket = {
   updated_at: string;
   resolved_at: string | null;
   status_since: string;
+  // Análisis del agente y respuestas del equipo (migración 009; pueden faltar antes).
+  triage?: TriageResult | null;
+  decisions?: Decision[];
 };
+
+export type TriageQuestion = { id: string; kind: "negocio" | "tecnica" | "cliente"; question: string; why: string };
+export type TriageResult = {
+  verdict: "direct" | "needs_decision";
+  summary: string;
+  questions: TriageQuestion[];
+  analyzedAt: string;
+  analyzedBy: string;
+  model: string;
+};
+export type Decision = { questionId: string | null; question: string; answer: string; by: string; at: string };
 
 export type Activity = {
   id: string;
-  kind: "comment" | "status" | "assignee" | "urgency" | "labels" | "created";
+  kind: "comment" | "status" | "assignee" | "urgency" | "labels" | "created" | "triage" | "decision";
   authorName: string | null;
   body: string | null;
   meta: Record<string, unknown>;

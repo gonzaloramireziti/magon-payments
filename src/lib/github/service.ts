@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { AdminSession } from "@/lib/admin/auth";
 import { notify } from "@/lib/env";
 import { githubTokenFor } from "@/lib/integrations/service";
+import { splitRepo } from "@/lib/integrations/repos";
 import { updateTicket } from "@/lib/tickets/service";
 import { storeTriage } from "@/lib/triage/service";
 import type { Decision, TriageResult } from "@/lib/triage/message";
@@ -93,17 +94,22 @@ export async function sendToGithub(
   if (!repos.length) {
     throw new GithubError("NO_REPO", 400, `${ticket.clients?.name ?? "El cliente"} no tiene repos cargados (Clientes → Editar).`);
   }
-  const repo = typeof rawRepo === "string" && repos.includes(rawRepo) ? rawRepo : repos[0];
+  const entry = typeof rawRepo === "string" && repos.includes(rawRepo) ? rawRepo : repos[0];
+  const { repo, base } = splitRepo(entry);
   const prompt = typeof rawPrompt === "string" ? rawPrompt.trim().slice(0, 60_000) : "";
   if (!prompt) throw new GithubError("EMPTY_PROMPT", 400, "Falta el prompt del ticket");
 
   const token = await githubTokenFor(userId);
   const issue = await github<{ number: number; html_url: string }>(token, `/repos/${repo}/issues`, {
     method: "POST",
-    body: { title: issueTitle(ticket), body: issueBody(prompt, notify.panelUrl ? `${notify.panelUrl.replace(/\/$/, "")}/admin` : null) },
+    body: {
+      title: issueTitle(ticket),
+      body: issueBody(prompt, notify.panelUrl ? `${notify.panelUrl.replace(/\/$/, "")}/admin` : null, base),
+    },
   });
   const link: GithubIssueLink = {
     repo,
+    base,
     number: issue.number,
     url: issue.html_url,
     createdAt: new Date().toISOString(),
@@ -209,13 +215,13 @@ export async function createPull(ticketId: string, rawBranch: unknown, actor: Ad
   if (!branch.startsWith(branchPrefix(link.number))) throw new GithubError("BAD_BRANCH", 400, "Esa rama no es de este ticket");
 
   const token = await githubTokenFor(userId);
-  const repo = await github<{ default_branch: string }>(token, `/repos/${link.repo}`);
+  const base = link.base ?? (await github<{ default_branch: string }>(token, `/repos/${link.repo}`)).default_branch;
   const pull = await github<{ number: number; html_url: string }>(token, `/repos/${link.repo}/pulls`, {
     method: "POST",
     body: {
       title: issueTitle(ticket),
       head: branch,
-      base: repo.default_branch,
+      base,
       body: `Closes #${link.number}\n\nTicket #${ticket.number} del panel de Magon.`,
     },
   });

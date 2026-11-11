@@ -495,7 +495,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
         />
         <TagsInput
           label="Repositorios de GitHub"
-          description="owner/nombre (o la URL). El agente abre los issues y PRs en el primero."
+          description="owner/nombre (o la URL). Si el cliente trabaja sobre una rama propia: owner/nombre@rama. Los issues se abren en el primero."
           placeholder={form.repos.length ? "" : "organizacion/repo-front"}
           value={form.repos}
           onChange={(repos) => set({ repos: repos.map((r) => r.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, "").replace(/\.git$/i, "")) })}

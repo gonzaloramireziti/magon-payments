@@ -39,6 +39,7 @@ import {
   IconAlertTriangle,
   IconArchive,
   IconBell,
+  IconPlugConnected,
   IconSpeakerphone,
   IconBook,
 } from "@tabler/icons-react";
@@ -47,6 +48,7 @@ import { Board, applyLocal, type TicketChanges } from "./board/Board";
 import { TicketDrawer } from "./board/TicketDrawer";
 import { Closed } from "./sections/Closed";
 import { MyAlerts } from "./sections/MyAlerts";
+import { MyIntegrations } from "./sections/MyIntegrations";
 import { DocsSection } from "./sections/Docs";
 import { diffSummaries, snapshot, titleWithCount, type Summary } from "./lib/watch";
 import {
@@ -98,6 +100,8 @@ export function AdminApp({ me }: { me: Me }) {
   const [clientFocus, setClientFocus] = useState<string | null>(null);
   const [unseen, setUnseen] = useState<Summary[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const closeIntegrations = useCallback(() => setIntegrationsOpen(false), []);
   const [desktopOn, setDesktopOn] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const lastSnapshot = useRef<Map<string, string> | null>(null);
@@ -225,6 +229,11 @@ export function AdminApp({ me }: { me: Me }) {
     },
     [users]
   );
+
+  // El análisis del agente ya se guardó en el server: solo se refleja en la lista.
+  const updateTicketLocal = useCallback((id: string, changes: Partial<Ticket>) => {
+    setTickets((current) => current.map((ticket) => (ticket.id === id ? { ...ticket, ...changes } : ticket)));
+  }, []);
 
   // Ticket cargado a mano: se marca como visto (no suena el aviso de "nuevo") y se abre.
   const onTicketCreated = useCallback(
@@ -443,6 +452,13 @@ export function AdminApp({ me }: { me: Me }) {
                 >
                   Mis avisos (WhatsApp, Discord, correo)
                 </Menu.Item>
+                <Menu.Item
+                  leftSection={<IconPlugConnected size={16} />}
+                  onClick={() => setIntegrationsOpen(true)}
+                  disabled={!me.id}
+                >
+                  Mis integraciones (Claude, GitHub)
+                </Menu.Item>
                 <Menu.Item leftSection={<IconLogout size={16} />} onClick={logout}>
                   Cerrar sesión
                 </Menu.Item>
@@ -478,6 +494,7 @@ export function AdminApp({ me }: { me: Me }) {
       </AppShell.Navbar>
 
       <MyAlerts opened={alertsOpen} onClose={() => setAlertsOpen(false)} />
+      <MyIntegrations opened={integrationsOpen} onClose={closeIntegrations} />
 
       <AppShell.Main>
         {me.emergency && (
@@ -527,6 +544,7 @@ export function AdminApp({ me }: { me: Me }) {
           clientContext={openedTicket ? clientContexts[openedTicket.client_id] ?? null : null}
           onClose={() => setOpenTicketId(null)}
           onChange={patchTicket}
+          onLocalUpdate={updateTicketLocal}
         />
       </AppShell.Main>
     </AppShell>

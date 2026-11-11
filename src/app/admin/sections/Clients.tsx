@@ -18,6 +18,7 @@ import {
   SimpleGrid,
   Stack,
   Switch,
+  TagsInput,
   Table,
   Text,
   Textarea,
@@ -62,6 +63,7 @@ type Client = {
   service_type?: string | null;
   service_description?: string | null;
   support_policy?: Record<string, string[]> | null;
+  repos?: string[] | null;
   status: Status | null;
 };
 
@@ -372,6 +374,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
     notes: client?.notes ?? "",
     serviceType: client?.service_type ?? "recurring",
     serviceDescription: client?.service_description ?? "",
+    repos: client?.repos ?? [],
   });
   const [preset, setPreset] = useState(
     POLICY_PRESETS.find((p) => samePolicy(p.policy, initialPolicy))?.value ?? "custom"
@@ -399,6 +402,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             serviceType: form.serviceType,
             serviceDescription: form.serviceDescription.trim() || null,
             ...(policy && !samePolicy(policy, initialPolicy) ? { supportPolicy: policy } : {}),
+            ...(form.repos.join() !== (client.repos ?? []).join() ? { repos: form.repos } : {}),
           },
         });
         notifyOk("Cliente actualizado");
@@ -416,6 +420,7 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
             notes: form.notes.trim() || null,
             serviceType: form.serviceType,
             serviceDescription: form.serviceDescription.trim() || null,
+            ...(form.repos.length ? { repos: form.repos } : {}),
           },
         });
         notifyOk(`Cliente creado. KEY: ${data.client.client_key}`);
@@ -487,6 +492,15 @@ function ClientModal({ client, onClose, onSaved }: { client: Client | null; onCl
           maxRows={6}
           value={form.notes}
           onChange={(e) => set({ notes: e.currentTarget.value })}
+        />
+        <TagsInput
+          label="Repositorios de GitHub"
+          description="owner/nombre (o la URL). El agente abre los issues y PRs en el primero."
+          placeholder={form.repos.length ? "" : "organizacion/repo-front"}
+          value={form.repos}
+          onChange={(repos) => set({ repos: repos.map((r) => r.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, "").replace(/\.git$/i, "")) })}
+          splitChars={[",", " "]}
+          clearable
         />
         {client ? (
           <>

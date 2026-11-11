@@ -89,6 +89,13 @@ export function buildTicketPrompt(ticket: Ticket, options: PromptOptions): strin
     push("");
   }
 
+  const decisions = (ticket.decisions ?? []).filter((d) => d.answer.trim());
+  if (decisions.length) {
+    push("## Decisiones tomadas", "", "El equipo ya definió esto: respetalo tal cual.", "");
+    for (const d of decisions) push(`- ${d.question}`, `  → ${d.answer.replace(/\n+/g, " ")}`);
+    push("");
+  }
+
   push("## Cómo trabajar", "");
   push("1. Leé el `CLAUDE.md` del proyecto antes de empezar y respetá su stack y sus convenciones.");
   push(`2. Hacé \`git status\` y creá la rama \`${branchName(ticket)}\` desde la rama actual del repo.`);
@@ -99,8 +106,11 @@ export function buildTicketPrompt(ticket: Ticket, options: PromptOptions): strin
     push("3. Antes de codear, definí el alcance y los criterios de aceptación. Si hay dudas que cambian el diseño, listalas y frená.");
     push("4. Implementalo siguiendo los patrones que ya existen en el proyecto (back y/o front según corresponda).");
   }
-  push("5. Verificá que compile y que pasen lint y tests. Si algo falla, mostrá la salida real.");
-  push("6. No commitees ni pushees: dejá los cambios en el working tree para probarlos.");
+  push(
+    "5. Si aparece una decisión de negocio o técnica que no está resuelta acá, no la inventes: frená y preguntá antes de seguir."
+  );
+  push("6. Verificá que compile y que pasen lint y tests. Si algo falla, mostrá la salida real.");
+  push("7. No commitees ni pushees: dejá los cambios en el working tree para probarlos.");
   push("");
   push("## Entregable", "");
   push(

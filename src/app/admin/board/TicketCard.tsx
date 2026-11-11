@@ -31,6 +31,13 @@ export function TicketCard({
   const type = TYPE[ticket.type];
   const urgency = URGENCY[ticket.urgency];
   const mine = me.id !== null && ticket.assignee_id === me.id;
+  const openQuestions =
+    ticket.triage?.questions.filter((q) => !(ticket.decisions ?? []).some((d) => d.questionId === q.id)).length ?? 0;
+  const agent = !ticket.triage
+    ? null
+    : openQuestions > 0
+      ? { label: `${openQuestions} duda${openQuestions > 1 ? "s" : ""}`, color: "yellow", tip: "El análisis dejó preguntas sin responder" }
+      : { label: "Directo", color: "teal", tip: "Listo para pasarle al agente" };
   // Cuánto lleva en esta columna: naranja o rojo cuando se estanca (ver agingLevel).
   const aging = agingLevel(ticket.status, ticket.status_since);
 
@@ -67,6 +74,13 @@ export function TicketCard({
             <Badge size="xs" color={urgency.color}>
               {urgency.label}
             </Badge>
+            {agent && (
+              <Tooltip label={agent.tip}>
+                <Badge size="xs" variant="dot" color={agent.color} style={{ flexShrink: 0 }}>
+                  {agent.label}
+                </Badge>
+              </Tooltip>
+            )}
           </Group>
           <Menu position="bottom-end" withinPortal>
             <Menu.Target>

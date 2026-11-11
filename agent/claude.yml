@@ -30,8 +30,18 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Rama base del ticket: el panel la marca en el issue cuando el cliente trabaja sobre una
+      # rama propia (ej. una rama por cliente). El cuerpo entra por env, nunca interpolado en el script.
+      - id: base
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          branch=$(printf '%s' "$ISSUE_BODY" | grep -oE 'magon:base=[A-Za-z0-9._/-]+' | head -n1 | cut -d= -f2 || true)
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
       - uses: anthropics/claude-code-action@v1
         with:
+          base_branch: ${{ steps.base.outputs.branch }}
           # Cada uno paga con su suscripción: se usa el secreto CLAUDE_TOKEN_<usuario de GitHub de quien lo dispara>
           # y, si no existe, el general CLAUDE_CODE_OAUTH_TOKEN. Los tokens se generan con `claude setup-token`.
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_TOKEN_{0}', github.actor)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}

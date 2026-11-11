@@ -3,6 +3,8 @@ import { parseTriageReply, QUESTIONS_MARKER, type Decision, type TriageQuestion 
 
 export type GithubIssueLink = {
   repo: string;
+  // Rama de la que parte Claude y contra la que va el PR (null = la rama por defecto del repo).
+  base?: string | null;
   number: number;
   url: string;
   createdAt: string;
@@ -13,14 +15,18 @@ export type GithubIssueLink = {
 
 export const TRIGGER = "@claude";
 
+// El workflow lee esta marca del cuerpo del issue para usar la rama base (input base_branch).
+export const BASE_MARKER = "magon:base=";
+
 export function issueTitle(ticket: { number: number; title: string; type: "bug" | "feature" }): string {
   return `[Ticket #${ticket.number}] ${ticket.type === "bug" ? "Problema" : "Pedido"}: ${ticket.title}`.slice(0, 250);
 }
 
 /** El issue arranca mencionando a Claude: eso dispara la Action en el repo. */
-export function issueBody(prompt: string, panelUrl: string | null): string {
+export function issueBody(prompt: string, panelUrl: string | null, base: string | null = null): string {
   return [
     `${TRIGGER} trabajá este ticket siguiendo las instrucciones de abajo.`,
+    ...(base ? ["", `**Rama base: \`${base}\`.** Partí de esa rama y no de la rama por defecto. <!-- ${BASE_MARKER}${base} -->`] : []),
     "",
     prompt.trim(),
     "",

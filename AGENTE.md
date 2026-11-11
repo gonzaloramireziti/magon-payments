@@ -33,7 +33,9 @@ trabaja con la suscripción de quien lo mandó:
 2. En una terminal: `claude setup-token` (con la cuenta de tu suscripción). Genera el token para la Action.
 
 **Por repo de cliente:**
-1. Cargar el repo en el panel: Clientes → Editar → **Repositorios de GitHub** (`owner/nombre`).
+1. Cargar el repo en el panel: Clientes → Editar → **Repositorios de GitHub** (`owner/nombre`). Si el cliente
+   trabaja sobre una rama propia (una rama por cliente), `owner/nombre@rama`: Claude parte de esa rama y el
+   PR va contra ella.
 2. Copiar [`agent/claude.yml`](agent/claude.yml) a `.github/workflows/claude.yml` y mergearlo en la rama por defecto.
 3. Instalar la GitHub App de Claude en el repo: https://github.com/apps/claude (o desde Claude Code: `/install-github-app`).
 4. En *Settings → Secrets and variables → Actions*, un secreto por persona: `CLAUDE_TOKEN_<USUARIO_DE_GITHUB>`

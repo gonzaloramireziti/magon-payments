@@ -2,9 +2,10 @@
 
 import type { DragEvent } from "react";
 import { ActionIcon, Avatar, Badge, Button, Group, Menu, Paper, Stack, Text, Tooltip } from "@mantine/core";
-import { IconBug, IconBulb, IconDots, IconHandGrab } from "@tabler/icons-react";
+import { IconBug, IconBulb, IconClock, IconDots, IconHandGrab } from "@tabler/icons-react";
 import { initials, relative } from "../lib/format";
 import { COLUMNS, STATUS_LABEL, TYPE, URGENCY, sourceLabel, type Me, type Ticket, type TicketStatus } from "../lib/tickets";
+import { agingLevel, humanDuration } from "./filter";
 
 export function TicketCard({
   ticket,
@@ -30,6 +31,8 @@ export function TicketCard({
   const type = TYPE[ticket.type];
   const urgency = URGENCY[ticket.urgency];
   const mine = me.id !== null && ticket.assignee_id === me.id;
+  // Cuánto lleva en esta columna: naranja o rojo cuando se estanca (ver agingLevel).
+  const aging = agingLevel(ticket.status, ticket.status_since);
 
   return (
     <Paper
@@ -110,10 +113,25 @@ export function TicketCard({
         )}
 
         <Group justify="space-between" gap={6} wrap="nowrap">
-          <Text size="xs" c="dimmed" truncate>
-            {ticket.client_name}
-            {ticket.channel !== "default" ? ` · ${sourceLabel(ticket.channel)}` : ""} · {relative(ticket.created_at)}
-          </Text>
+          <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+            <Tooltip
+              label={`En «${STATUS_LABEL[ticket.status]}» desde ${relative(ticket.status_since)} · cargado ${relative(ticket.created_at)}`}
+            >
+              <Badge
+                size="xs"
+                variant={aging === "ok" ? "default" : "light"}
+                color={aging === "late" ? "red" : aging === "warn" ? "orange" : "gray"}
+                leftSection={<IconClock size={10} />}
+                style={{ flexShrink: 0 }}
+              >
+                {humanDuration(Date.now() - new Date(ticket.status_since).getTime())}
+              </Badge>
+            </Tooltip>
+            <Text size="xs" c="dimmed" truncate>
+              {ticket.client_name}
+              {ticket.channel !== "default" ? ` · ${sourceLabel(ticket.channel)}` : ""}
+            </Text>
+          </Group>
           {ticket.assignee_name ? (
             <Tooltip label={mine ? "Asignado a vos" : `Asignado a ${ticket.assignee_name}`}>
               <Avatar size={22} radius="xl" color={mine ? "brand" : "gray"}>

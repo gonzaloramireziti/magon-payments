@@ -504,6 +504,7 @@ export function AdminApp({ me }: { me: Me }) {
               setOpenTicketId(id);
               if (id) setUnseen((current) => current.filter((t) => t.id !== id));
             }}
+            onOpenClosed={() => go("terminados")}
           />
         )}
         {section === "terminados" && (

@@ -22,6 +22,7 @@ import {
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Title,
   Tooltip,
   UnstyledButton,
@@ -29,7 +30,9 @@ import {
 import { useDebouncedValue, useMediaQuery } from "@mantine/hooks";
 import {
   IconAdjustmentsHorizontal,
+  IconArrowRight,
   IconArrowsSort,
+  IconCircleCheck,
   IconLayoutKanban,
   IconList,
   IconPlus,
@@ -57,7 +60,11 @@ import {
   allLabels,
   applyFilters,
   positionBetween,
-  recentlyResolved,
+  RESOLVED_WINDOWS,
+  humanDuration,
+  resolutionTime,
+  resolvedWithin,
+  type ResolvedWindow,
   sortTickets,
   type BoardFilters,
   type SortKey,
@@ -75,6 +82,9 @@ export type TicketChanges = Partial<{
 
 const FILTERS_KEY = "magon.board.filters";
 const VIEW_KEY = "magon.board.view";
+const RESOLVED_KEY = "magon.board.resolvedWindow";
+// Cuántas tarjetas compactas se ven en "Resuelto"; el resto queda en Terminados.
+const RESOLVED_VISIBLE = 8;
 
 function readStored<T>(key: string, fallback: T): T {
   try {
@@ -121,6 +131,7 @@ export function Board({
   reload,
   onCreated,
   setOpenTicketId,
+  onOpenClosed,
 }: {
   me: Me;
   tickets: Ticket[];
@@ -131,8 +142,17 @@ export function Board({
   onPatch: (id: string, changes: TicketChanges) => Promise<void>;
   reload: () => Promise<void>;
   setOpenTicketId: (id: string | null) => void;
+  onOpenClosed: () => void;
 }) {
   const mobile = useMediaQuery("(max-width: 48em)");
+  const [resolvedWindow, setResolvedWindowState] = useState<ResolvedWindow>("today");
+  useEffect(() => {
+    setResolvedWindowState(readStored<{ value: ResolvedWindow }>(RESOLVED_KEY, { value: "today" }).value);
+  }, []);
+  const setResolvedWindow = (value: ResolvedWindow) => {
+    setResolvedWindowState(value);
+    writeStored(RESOLVED_KEY, { value });
+  };
   const [filters, setFiltersState] = useState<BoardFilters>(EMPTY_FILTERS);
   const [view, setView] = useState<"board" | "list">("board");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -184,8 +204,12 @@ export function Board({
   function columnTickets(status: TicketStatus): Ticket[] {
     return visible
       .filter((ticket) => ticket.status === status)
-      .filter((ticket) => status !== "done" || filters.showClosed || recentlyResolved(ticket))
-      .sort((a, b) => a.position - b.position);
+      .filter((ticket) => status !== "done" || filters.showClosed || resolvedWithin(ticket, resolvedWindow))
+      .sort((a, b) =>
+        status === "done"
+          ? (b.resolved_at ?? b.updated_at).localeCompare(a.resolved_at ?? a.updated_at)
+          : a.position - b.position
+      );
   }
 
   function drop(event: DragEvent, status: TicketStatus, beforeId: string | null) {
@@ -403,6 +427,10 @@ export function Board({
         </Stack>
       </Drawer>
 
+      {state === "ready" && view === "board" && openCount === 0 && !filterCount && !filters.search && tickets.length > 0 && (
+        <AllClear tickets={tickets} onOpenClosed={onOpenClosed} />
+      )}
+
       {state === "loading" ? (
         <Center py="xl">
           <Loader />
@@ -416,6 +444,7 @@ export function Board({
                 key={column.status}
                 className="mg-column"
                 data-over={overColumn === column.status}
+                data-empty={items.length === 0 && column.status !== "done"}
                 onDragOver={(event) => {
                   event.preventDefault();
                   setOverColumn(column.status);
@@ -423,17 +452,27 @@ export function Board({
                 onDragLeave={() => setOverColumn((current) => (current === column.status ? null : current))}
                 onDrop={(event) => drop(event, column.status, null)}
               >
-                <Group justify="space-between" px="sm" pt="sm" pb={4}>
-                  <Group gap={8}>
-                    <Box w={8} h={8} style={{ borderRadius: 99, background: `var(--mantine-color-${column.color}-6)` }} />
-                    <Text size="sm" fw={600}>
+                <Group justify="space-between" px="sm" pt="sm" pb={4} wrap="nowrap" gap={6}>
+                  <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                    <Box w={8} h={8} style={{ borderRadius: 99, flexShrink: 0, background: `var(--mantine-color-${column.color}-6)` }} />
+                    <Text size="sm" fw={600} truncate title={column.label}>
                       {column.label}
                     </Text>
                   </Group>
-                  <Badge size="sm" variant="default">
+                  <Badge size="sm" variant="default" style={{ flexShrink: 0 }}>
                     {items.length}
                   </Badge>
                 </Group>
+                {column.status === "done" && !filters.showClosed ? (
+                  <ResolvedColumnBody
+                    items={items}
+                    total={visible.filter((ticket) => ticket.status === "done").length}
+                    window={resolvedWindow}
+                    onWindow={setResolvedWindow}
+                    onOpen={setOpenTicketId}
+                    onOpenClosed={onOpenClosed}
+                  />
+                ) : (
                 <div className="mg-column-body">
                   {items.map((ticket) => (
                     <TicketCard
@@ -463,10 +502,11 @@ export function Board({
                   ))}
                   {items.length === 0 && (
                     <Text size="xs" c="dimmed" ta="center" py="md">
-                      {column.status === "done" && !filters.showClosed ? "Nada resuelto en 2 semanas" : "Sin tickets"}
+                      Sin tickets
                     </Text>
                   )}
                 </div>
+                )}
               </div>
             );
           })}
@@ -672,6 +712,90 @@ export function TicketList({
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
+    </Paper>
+  );
+}
+
+/** "Resuelto" como resumen: lo cerrado en el período elegido, compacto y con link a Terminados. */
+function ResolvedColumnBody({
+  items,
+  total,
+  window,
+  onWindow,
+  onOpen,
+  onOpenClosed,
+}: {
+  items: Ticket[];
+  total: number;
+  window: ResolvedWindow;
+  onWindow: (value: ResolvedWindow) => void;
+  onOpen: (id: string) => void;
+  onOpenClosed: () => void;
+}) {
+  const shown = items.slice(0, RESOLVED_VISIBLE);
+  const rest = total - shown.length;
+  return (
+    <div className="mg-column-body">
+      <SegmentedControl size="xs" fullWidth value={window} onChange={(v) => onWindow(v as ResolvedWindow)} data={RESOLVED_WINDOWS} />
+      {shown.map((ticket) => (
+        <UnstyledButton key={ticket.id} className="mg-resolved-row" onClick={() => onOpen(ticket.id)}>
+          <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+            <IconCircleCheck size={14} color="var(--mantine-color-teal-6)" style={{ flexShrink: 0 }} />
+            <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+              #{ticket.number}
+            </Text>
+            <Text size="xs" fw={500} truncate>
+              {ticket.title}
+            </Text>
+          </Group>
+          <Text size="xs" c="dimmed" mt={2} truncate>
+            {ticket.client_name} · {relative(ticket.resolved_at ?? ticket.updated_at)}
+            {resolutionTime(ticket) ? ` · en ${resolutionTime(ticket)}` : ""}
+          </Text>
+        </UnstyledButton>
+      ))}
+      {shown.length === 0 && (
+        <Text size="xs" c="dimmed" ta="center" py="sm">
+          {window === "today" ? "Nada resuelto hoy" : "Nada resuelto en este período"}
+        </Text>
+      )}
+      {rest > 0 && (
+        <Button size="compact-xs" variant="subtle" onClick={onOpenClosed} rightSection={<IconArrowRight size={12} />}>
+          {rest} más en Terminados
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Sin nada abierto: en vez de columnas vacías, un resumen de cómo viene el equipo. */
+function AllClear({ tickets, onOpenClosed }: { tickets: Ticket[]; onOpenClosed: () => void }) {
+  const done = tickets.filter((t) => t.status === "done");
+  const today = done.filter((t) => resolvedWithin(t, "today")).length;
+  const week = done.filter((t) => resolvedWithin(t, "7")).length;
+  const times = done
+    .filter((t) => t.resolved_at && resolvedWithin(t, "7"))
+    .map((t) => new Date(t.resolved_at!).getTime() - new Date(t.created_at).getTime());
+  const average = times.length ? humanDuration(times.reduce((a, b) => a + b, 0) / times.length) : null;
+  return (
+    <Paper p="md" withBorder style={{ borderColor: "var(--mantine-color-teal-3)" }}>
+      <Group justify="space-between" wrap="wrap" gap="sm">
+        <Group gap="sm" wrap="nowrap">
+          <ThemeIcon color="teal" variant="light" size="lg" radius="xl">
+            <IconCircleCheck size={20} />
+          </ThemeIcon>
+          <div>
+            <Text fw={600}>Todo al día: no hay tickets abiertos</Text>
+            <Text size="sm" c="dimmed">
+              {today} resuelto(s) hoy · {week} en los últimos 7 días
+              {average ? ` · tiempo medio de resolución: ${average}` : ""}
+            </Text>
+          </div>
+        </Group>
+        <Button size="xs" variant="light" color="teal" onClick={onOpenClosed}>
+          Ver Terminados
+        </Button>
+      </Group>
     </Paper>
   );
 }

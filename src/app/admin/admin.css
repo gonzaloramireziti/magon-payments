@@ -1,17 +1,17 @@
-/* Tablero: columnas con scroll horizontal y snap en pantallas angostas. */
+/* Tablero: columnas con scroll horizontal. Las vacías se achican para que lo que tiene
+   contenido entre en pantalla; en celular cada columna ocupa casi todo el ancho. */
 .mg-board {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(268px, 1fr);
+  display: flex;
   gap: 12px;
   overflow-x: auto;
   padding-bottom: 8px;
   scroll-snap-type: x mandatory;
-  align-items: start;
+  align-items: flex-start;
 }
-.mg-board > * { scroll-snap-align: start; }
+.mg-board > * { scroll-snap-align: start; flex: 1 0 260px; min-width: 0; }
+.mg-board > [data-empty="true"] { flex: 0 1 170px; }
 @media (max-width: 48em) {
-  .mg-board { grid-auto-columns: 86vw; }
+  .mg-board > *, .mg-board > [data-empty="true"] { flex: 0 0 86vw; }
 }
 .mg-column {
   background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7));
@@ -26,7 +26,7 @@
   border-color: var(--mantine-color-brand-5);
   background: light-dark(var(--mantine-color-brand-0), rgba(116, 78, 222, 0.12));
 }
-.mg-column-body { overflow-y: auto; padding: 8px; display: grid; gap: 8px; align-content: start; flex: 1; }
+.mg-column-body { overflow-y: auto; overflow-x: hidden; padding: 8px; display: grid; gap: 8px; align-content: start; flex: 1; min-width: 0; }
 .mg-card {
   cursor: pointer;
   transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
@@ -38,3 +38,18 @@
 .mg-card:hover .mg-card-take, .mg-card:focus-within .mg-card-take { opacity: 1; }
 @media (hover: none) { .mg-card .mg-card-take { opacity: 1; } }
 .mg-row { cursor: pointer; }
+
+/* Fila compacta de la columna "Resuelto". */
+.mg-resolved-row {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: var(--mantine-radius-sm);
+  border: 1px solid transparent;
+}
+.mg-resolved-row:hover {
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+  border-color: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+}

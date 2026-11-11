@@ -292,6 +292,8 @@ export async function listClientTickets(
 export type AdminTicket = TicketRow & {
   client_name: string;
   assignee_name: string | null;
+  // Desde cuándo está en la columna actual: el último cambio de estado del historial (o la creación).
+  status_since: string;
   attachment_urls: Array<TicketAttachment & { url: string | null }>;
 };
 
@@ -350,6 +352,23 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
   const { data, error } = await query;
   if (error) throw error;
 
+  // Último cambio de estado de cada ticket, sacado del historial (viene ordenado del más nuevo).
+  const ids = (data ?? []).map((row) => row.id as string);
+  const statusSince = new Map<string, string>();
+  if (ids.length) {
+    const { data: events } = await supabase
+      .from("ticket_activity")
+      .select("ticket_id,created_at")
+      .eq("kind", "status")
+      .in("ticket_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(5000);
+    for (const event of events ?? []) {
+      const id = event.ticket_id as string;
+      if (!statusSince.has(id)) statusSince.set(id, event.created_at as string);
+    }
+  }
+
   return Promise.all(
     (data ?? []).map(async (row) => {
       const { clients, assignee, ...ticket } = row as TicketRow & {
@@ -361,6 +380,7 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
         labels: ticket.labels ?? [],
         client_name: clients?.name ?? "-",
         assignee_name: assignee?.name ?? null,
+        status_since: statusSince.get(ticket.id) ?? ticket.resolved_at ?? ticket.created_at,
         attachment_urls: await signAttachments(ticket.attachments),
       };
     })

@@ -1,6 +1,6 @@
 // Filtros y orden del tablero. Sin React ni Mantine, para poder probarlos sueltos.
 import { normalizeText } from "../lib/format";
-import { URGENCY, type Ticket, type TicketType, type TicketUrgency } from "../lib/tickets";
+import { URGENCY, type Ticket, type TicketStatus, type TicketType, type TicketUrgency } from "../lib/tickets";
 
 export type Scope = "all" | "mine" | "unassigned" | `user:${string}`;
 
@@ -80,10 +80,64 @@ export function applyFilters(tickets: Ticket[], filters: BoardFilters, meId: str
   });
 }
 
-// Columna "Resuelto": sin "ver cerrados" muestra solo lo cerrado en las últimas 2 semanas.
-export function recentlyResolved(ticket: Ticket, now = Date.now()): boolean {
-  const when = ticket.resolved_at ?? ticket.updated_at;
-  return now - new Date(when).getTime() <= 14 * 24 * 60 * 60 * 1000;
+// Columna "Resuelto": muestra solo lo cerrado hace poco. Lo demás vive en Terminados.
+export type ResolvedWindow = "today" | "3" | "7";
+export const RESOLVED_WINDOWS: Array<{ value: ResolvedWindow; label: string }> = [
+  { value: "today", label: "Hoy" },
+  { value: "3", label: "3 días" },
+  { value: "7", label: "7 días" },
+];
+
+function startOfLocalDay(now: number): number {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function resolvedWithin(
+  ticket: Pick<Ticket, "resolved_at" | "updated_at">,
+  window: ResolvedWindow,
+  now = Date.now()
+): boolean {
+  const when = new Date(ticket.resolved_at ?? ticket.updated_at).getTime();
+  if (window === "today") return when >= startOfLocalDay(now);
+  return now - when <= Number(window) * 24 * 60 * 60 * 1000;
+}
+
+// Hasta cuándo se banca un ticket en cada columna antes de marcarlo (en horas).
+const AGING_HOURS: Partial<Record<TicketStatus, { warn: number; late: number }>> = {
+  new: { warn: 24, late: 72 },
+  analysis: { warn: 72, late: 168 },
+  ready: { warn: 72, late: 168 },
+  in_progress: { warn: 72, late: 168 },
+  testing: { warn: 48, late: 120 },
+};
+
+export type Aging = "ok" | "warn" | "late";
+
+export function agingLevel(status: TicketStatus, since: string, now = Date.now()): Aging {
+  const limits = AGING_HOURS[status];
+  if (!limits) return "ok";
+  const hours = (now - new Date(since).getTime()) / 3_600_000;
+  if (hours >= limits.late) return "late";
+  if (hours >= limits.warn) return "warn";
+  return "ok";
+}
+
+export function humanDuration(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / 60_000));
+  if (minutes < 1) return "menos de 1 min";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 día" : `${days} días`;
+}
+
+/** Cuánto tardó en resolverse (desde que lo cargó el cliente). */
+export function resolutionTime(ticket: Pick<Ticket, "created_at" | "resolved_at">): string | null {
+  if (!ticket.resolved_at) return null;
+  return humanDuration(new Date(ticket.resolved_at).getTime() - new Date(ticket.created_at).getTime());
 }
 
 export type SortKey = "number" | "urgency" | "created" | "updated" | "client";

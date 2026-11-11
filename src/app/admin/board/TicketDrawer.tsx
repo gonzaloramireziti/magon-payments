@@ -199,6 +199,7 @@ export function TicketDrawer({
   const [prompt, setPrompt] = useState("");
   const [discardOpen, setDiscardOpen] = useState(false);
   const [discardReason, setDiscardReason] = useState("");
+  const [discardShare, setDiscardShare] = useState(true);
   const [discarding, setDiscarding] = useState(false);
   const ticketId = ticket?.id ?? null;
 
@@ -219,6 +220,7 @@ export function TicketDrawer({
     setPromptOpen(false);
     setDiscardOpen(false);
     setDiscardReason("");
+    setDiscardShare(true);
     void loadActivity();
   }, [loadActivity]);
 
@@ -257,17 +259,19 @@ export function TicketDrawer({
     .join(" · ");
   const comments = activity?.filter((item) => item.kind === "comment").length ?? 0;
 
-  // El motivo queda como comentario, así se sabe por qué no se hizo.
+  // El motivo queda como comentario (así se sabe por qué no se hizo) y, si se elige, como mensaje
+  // para el cliente: lo ve en «Mis reportes» y va en el correo del cambio de estado.
   async function discard() {
     setDiscarding(true);
     try {
-      if (discardReason.trim()) {
+      const reason = discardReason.trim();
+      if (reason) {
         await api("/api/admin/tickets/activity", {
           method: "POST",
-          json: { ticketId: ticket!.id, body: `Descartado: ${discardReason.trim()}` },
+          json: { ticketId: ticket!.id, body: `Descartado: ${reason}${discardShare ? " (se le mostró al cliente)" : ""}` },
         });
       }
-      await change({ status: "discarded" });
+      await change({ status: "discarded", clientNote: reason && discardShare ? reason : null });
       setDiscardOpen(false);
       setDiscardReason("");
     } catch (error) {
@@ -374,6 +378,14 @@ export function TicketDrawer({
               minRows={2}
               value={discardReason}
               onChange={(e) => setDiscardReason(e.currentTarget.value)}
+            />
+            <Switch
+              size="sm"
+              label="Mostrarle el motivo al cliente"
+              description="Lo ve en «Mis reportes» del botón de reportes y va en el correo. Escribilo para el cliente."
+              checked={discardShare}
+              disabled={!discardReason.trim()}
+              onChange={(e) => setDiscardShare(e.currentTarget.checked)}
             />
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setDiscardOpen(false)}>
@@ -576,6 +588,11 @@ export function TicketDrawer({
                 <Text size="xs" c="dimmed">
                   {ticket.user_agent}
                 </Text>
+              </Field>
+            )}
+            {ticket.client_note && (
+              <Field label="Mensaje al cliente">
+                <Prose value={ticket.client_note} />
               </Field>
             )}
             {ticket.internal_notes && (

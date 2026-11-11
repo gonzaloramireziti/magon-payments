@@ -93,7 +93,9 @@ export function GithubSection({
         method: "POST",
         json: { ticketId: ticket.id, prompt, repo },
       });
-      onUpdated({ github_issue: data.issue });
+      // El servidor pasa el ticket a «En desarrollo» si estaba antes en el flujo.
+      const moves = ["new", "analysis", "ready"].includes(ticket.status);
+      onUpdated({ github_issue: data.issue, ...(moves ? { status: "in_progress" as const, status_since: new Date().toISOString() } : {}) });
       setSendOpen(false);
       notifyOk(`Issue creado: ${data.issue.repo}#${data.issue.number}. Claude arranca en unos segundos.`);
     } catch (err) {

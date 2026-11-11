@@ -31,6 +31,8 @@ export type Ticket = {
   updated_at: string;
   resolved_at: string | null;
   status_since: string;
+  // Mensaje para el cliente al cerrar (migración 011).
+  client_note?: string | null;
   // Análisis del agente y respuestas del equipo (migración 009; pueden faltar antes).
   triage?: TriageResult | null;
   decisions?: Decision[];

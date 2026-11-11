@@ -37,6 +37,8 @@ export type MagonClientTicket = {
   status: MagonTicketStatus;
   createdAt: string;
   resolvedAt: string | null;
+  /** Mensaje del equipo al cerrar: motivo del descarte o nota de la resolución. */
+  note?: string | null;
 };
 
 export type MagonSupportLabels = {
@@ -67,6 +69,8 @@ export type MagonSupportLabels = {
   disabled: string;
   updatesTitle: string;
   updatesView: string;
+  noteDiscarded: string;
+  noteDone: string;
   urgency: Record<MagonTicketUrgency, string>;
   status: Record<MagonTicketStatus, string>;
 };
@@ -99,6 +103,8 @@ export const DEFAULT_SUPPORT_LABELS: MagonSupportLabels = {
   disabled: "Los reportes no están habilitados para esta cuenta.",
   updatesTitle: "Novedades de tus reportes",
   updatesView: "Ver mis reportes",
+  noteDiscarded: "Motivo",
+  noteDone: "Nota del equipo",
   urgency: {
     low: "Puedo seguir trabajando normalmente",
     medium: "Me complica, pero puedo seguir",
@@ -625,6 +631,25 @@ export function MagonSupport(props: MagonSupportProps) {
                       </span>
                     </div>
                     <div style={{ fontSize: 14, marginTop: 4 }}>{ticket.title}</div>
+                    {ticket.note && (
+                      <div
+                        style={{
+                          fontSize: 13,
+                          marginTop: 6,
+                          padding: "6px 8px",
+                          borderRadius: Math.max(4, t.radius - 8),
+                          background: t.background,
+                          color: t.muted,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        <strong style={{ color: t.text }}>
+                          {ticket.status === "discarded" ? l.noteDiscarded : l.noteDone}:
+                        </strong>{" "}
+                        {ticket.note}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

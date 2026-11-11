@@ -185,10 +185,11 @@ export async function notifyReporterStatus(
   ticket: TicketForMessage,
   reporter: { name: string | null; email: string | null },
   from: string,
-  to: string
+  to: string,
+  note: string | null = null
 ): Promise<void> {
   if (!reporter.email || from === to || !availableChannels().email) return;
-  const message = buildReporterStatusEmail(ticket, reporter.name, to);
+  const message = buildReporterStatusEmail(ticket, reporter.name, to, note);
   try {
     await post(
       "https://api.resend.com/emails",

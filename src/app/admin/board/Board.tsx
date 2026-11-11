@@ -78,6 +78,8 @@ export type TicketChanges = Partial<{
   assigneeId: string | null;
   labels: string[];
   position: number;
+  // Mensaje para el cliente al cerrar (lo ve en «Mis reportes» y va en el correo).
+  clientNote: string | null;
 }>;
 
 const FILTERS_KEY = "magon.board.filters";
@@ -116,7 +118,9 @@ export function applyLocal(ticket: Ticket, changes: TicketChanges, users: PanelU
   }
   if (changes.status) {
     next.resolved_at = isClosed(changes.status) ? ticket.resolved_at ?? new Date().toISOString() : null;
+    if (!isClosed(changes.status)) next.client_note = null;
   }
+  if (changes.clientNote !== undefined) next.client_note = changes.clientNote;
   next.updated_at = new Date().toISOString();
   return next;
 }

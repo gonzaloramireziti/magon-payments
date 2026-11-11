@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { AdminSession } from "@/lib/admin/auth";
 import { anthropicKeyFor } from "@/lib/integrations/service";
 import { analyzeTicket, TriageError } from "@/lib/triage/analyze";
-import { mergeDecisions, type Decision, type TriageResult } from "@/lib/triage/message";
+import { mergeDecisions, parseTriageReply, type Decision, type TriageResult } from "@/lib/triage/message";
 
 /**
  * Análisis del agente y decisiones del equipo. Solo el responsable del ticket los usa: se
@@ -25,7 +25,7 @@ async function ticketForAgent(ticketId: string, actor: AdminSession) {
   return data;
 }
 
-async function record(ticketId: string, actor: AdminSession, kind: "triage" | "decision", body: string, meta: Record<string, unknown>) {
+async function record(ticketId: string, actor: Pick<AdminSession, "userId" | "name">, kind: "triage" | "decision", body: string, meta: Record<string, unknown>) {
   const { error } = await getSupabaseAdmin().from("ticket_activity").insert({
     ticket_id: ticketId,
     author_id: actor.userId,
@@ -64,18 +64,40 @@ export async function runTriage(ticketId: string, actor: AdminSession): Promise<
     decisions,
   });
 
+  return { triage: await storeTriage(ticketId, actor, result), decisions };
+}
+
+/** Guarda un análisis nuevo. Las decisiones ya tomadas se conservan. */
+export async function storeTriage(
+  ticketId: string,
+  actor: Pick<AdminSession, "userId" | "name">,
+  result: Omit<TriageResult, "analyzedAt" | "analyzedBy">
+): Promise<TriageResult> {
   const triage: TriageResult = { ...result, analyzedAt: new Date().toISOString(), analyzedBy: actor.name };
   const { error } = await getSupabaseAdmin().from("tickets").update({ triage }).eq("id", ticketId);
   if (error) throw error;
-  await record(ticketId, actor, "triage", result.summary, { verdict: result.verdict, questions: result.questions.length });
-  return { triage, decisions };
+  await record(ticketId, actor, "triage", result.summary, { verdict: result.verdict, questions: result.questions.length, model: result.model });
+  return triage;
+}
+
+/** Análisis hecho a mano con el plan de Claude: se pega la respuesta y se valida. */
+export async function saveManualTriage(
+  ticketId: string,
+  reply: unknown,
+  actor: AdminSession
+): Promise<{ triage: TriageResult; decisions: Decision[] }> {
+  const ticket = await ticketForAgent(ticketId, actor);
+  const parsed = parseTriageReply(typeof reply === "string" ? reply.slice(0, 50_000) : "", `m${Date.now().toString(36)}-`);
+  if (!parsed.ok) throw new TriageError("BAD_REPLY", 400, parsed.error);
+  const triage = await storeTriage(ticketId, actor, { ...parsed.value, model: "manual" });
+  return { triage, decisions: (ticket.decisions as Decision[] | null) ?? [] };
 }
 
 export async function saveDecisions(
   ticketId: string,
   rawAnswers: unknown,
   actor: AdminSession
-): Promise<{ decisions: Decision[] }> {
+): Promise<{ decisions: Decision[]; added: Decision[] }> {
   const ticket = await ticketForAgent(ticketId, actor);
   const triage = ticket.triage as TriageResult | null;
   if (!triage) throw new TriageError("NO_TRIAGE", 400, "Primero analizá el ticket con el agente");
@@ -89,7 +111,7 @@ export async function saveDecisions(
   const current = (ticket.decisions as Decision[] | null) ?? [];
   const decisions = mergeDecisions(current, triage.questions, answers, actor.name, new Date().toISOString());
   const added = decisions.filter((d) => !current.includes(d));
-  if (!added.length) return { decisions: current };
+  if (!added.length) return { decisions: current, added };
 
   const { error } = await getSupabaseAdmin().from("tickets").update({ decisions }).eq("id", ticketId);
   if (error) throw error;
@@ -100,5 +122,5 @@ export async function saveDecisions(
     added.map((d) => `${d.question} → ${d.answer}`).join("\n"),
     { count: added.length }
   );
-  return { decisions };
+  return { decisions, added };
 }

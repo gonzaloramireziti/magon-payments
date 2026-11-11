@@ -70,8 +70,9 @@ export async function analyzeTicket(
   return {
     verdict: parsed.questions.length === 0 ? "direct" : parsed.verdict,
     summary: parsed.summary.trim().slice(0, 600),
+    // Ids únicos por análisis: así una respuesta vieja nunca marca como respondida una pregunta nueva.
     questions: parsed.questions.slice(0, 6).map((q, index) => ({
-      id: `q${index + 1}`,
+      id: `a${Date.now().toString(36)}-${index + 1}`,
       kind: q.kind,
       question: q.question.trim().slice(0, 500),
       why: q.why.trim().slice(0, 500),

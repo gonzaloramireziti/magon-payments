@@ -89,13 +89,16 @@ function sectionFromHash(): SectionId {
   return SECTIONS.some((s) => s.id === hash) ? (hash as SectionId) : "tablero";
 }
 
+// Referencia estable para clientes sin repos (evita re-render del drawer).
+const NO_REPOS: string[] = [];
+
 export function AdminApp({ me }: { me: Me }) {
   const [section, setSection] = useState<SectionId>("tablero");
   const [navOpen, { toggle: toggleNav, close: closeNav }] = useDisclosure(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketsState, setTicketsState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [users, setUsers] = useState<PanelUser[]>([]);
-  const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null; active?: boolean }>>([]);
+  const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null; repos?: string[] | null; active?: boolean }>>([]);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [clientFocus, setClientFocus] = useState<string | null>(null);
   const [unseen, setUnseen] = useState<Summary[]>([]);
@@ -159,7 +162,7 @@ export function AdminApp({ me }: { me: Me }) {
   useEffect(() => {
     void loadTickets();
     void loadUsers();
-    api<{ clients: Array<{ id: string; name: string; notes: string | null; active?: boolean }> }>("/api/admin/clients")
+    api<{ clients: Array<{ id: string; name: string; notes: string | null; repos?: string[] | null; active?: boolean }> }>("/api/admin/clients")
       .then((data) => setClients(data.clients))
       .catch(() => setClients([]));
   }, [loadTickets, loadUsers]);
@@ -250,6 +253,11 @@ export function AdminApp({ me }: { me: Me }) {
   const openedTicket = tickets.find((ticket) => ticket.id === openTicketId) ?? null;
   const clientContexts = useMemo(
     () => Object.fromEntries(clients.map((c) => [c.id, c.notes ?? null])) as Record<string, string | null>,
+    [clients]
+  );
+
+  const clientRepos = useMemo(
+    () => Object.fromEntries(clients.map((c) => [c.id, c.repos ?? NO_REPOS])) as Record<string, string[]>,
     [clients]
   );
 
@@ -542,6 +550,7 @@ export function AdminApp({ me }: { me: Me }) {
           users={users}
           labelOptions={Array.from(new Set(tickets.flatMap((t) => t.labels))).sort()}
           clientContext={openedTicket ? clientContexts[openedTicket.client_id] ?? null : null}
+          clientRepos={openedTicket ? clientRepos[openedTicket.client_id] ?? NO_REPOS : NO_REPOS}
           onClose={() => setOpenTicketId(null)}
           onChange={patchTicket}
           onLocalUpdate={updateTicketLocal}

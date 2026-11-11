@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Alert, Badge, Button, Group, Paper, Stack, Text, Textarea } from "@mantine/core";
-import { IconAlertTriangle, IconCircleCheck, IconSparkles } from "@tabler/icons-react";
+import { Alert, Badge, Button, CopyButton, Group, Menu, Modal, Paper, Stack, Text, Textarea } from "@mantine/core";
+import { IconAlertTriangle, IconCheck, IconChevronDown, IconCircleCheck, IconCopy, IconSparkles } from "@tabler/icons-react";
 import { api, notifyError, notifyOk } from "../lib/api";
 import { relative } from "../lib/format";
-import type { Decision, Me, Ticket, TriageQuestion, TriageResult } from "../lib/tickets";
+import type { Activity, Decision, Me, Ticket, TriageQuestion, TriageResult } from "../lib/tickets";
+import { buildManualTriagePrompt } from "../../../lib/triage/message";
+import { GithubSection } from "./GithubSection";
 
 const KIND_LABEL: Record<TriageQuestion["kind"], { label: string; color: string }> = {
   negocio: { label: "Negocio", color: "grape" },
@@ -25,16 +27,25 @@ export const VERDICT = {
 export function AgentPanel({
   ticket,
   me,
+  activity,
+  clientContext,
+  repos,
   onUpdated,
 }: {
   ticket: Ticket;
   me: Me;
-  onUpdated: (changes: { triage?: TriageResult; decisions: Decision[] }) => void;
+  activity: Activity[];
+  clientContext: string | null;
+  repos: string[];
+  onUpdated: (changes: Partial<Ticket>) => void;
 }) {
   const [triage, setTriage] = useState<TriageResult | null>(ticket.triage ?? null);
   const [decisions, setDecisions] = useState<Decision[]>(ticket.decisions ?? []);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<"analyze" | "save" | null>(null);
+  const [busy, setBusy] = useState<"analyze" | "save" | "manual" | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualPrompt, setManualPrompt] = useState("");
+  const [reply, setReply] = useState("");
   const mine = me.id !== null && ticket.assignee_id === me.id;
 
   useEffect(() => {
@@ -61,10 +72,48 @@ export function AgentPanel({
     }
   }
 
+  // Análisis con el plan de Claude de cada uno: se copia el prompt, se pega la respuesta.
+  function openManual() {
+    setManualPrompt(
+      buildManualTriagePrompt({
+        number: ticket.number,
+        type: ticket.type,
+        title: ticket.title,
+        description: ticket.description,
+        expected: ticket.expected,
+        actual: ticket.actual,
+        clientName: ticket.client_name,
+        clientContext,
+        comments: activity.filter((a) => a.kind === "comment" && a.body).map((a) => ({ author: a.authorName, body: a.body! })),
+        decisions,
+      })
+    );
+    setReply("");
+    setManualOpen(true);
+  }
+
+  async function saveManual() {
+    setBusy("manual");
+    try {
+      const data = await api<{ triage: TriageResult; decisions: Decision[] }>("/api/admin/tickets/triage", {
+        method: "POST",
+        json: { ticketId: ticket.id, reply },
+      });
+      setTriage(data.triage);
+      setAnswers({});
+      setManualOpen(false);
+      onUpdated(data);
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function save() {
     setBusy("save");
     try {
-      const data = await api<{ decisions: Decision[] }>("/api/admin/tickets/triage", {
+      const data = await api<{ decisions: Decision[]; github: { posted: boolean; error: string | null } }>("/api/admin/tickets/triage", {
         method: "PUT",
         json: {
           ticketId: ticket.id,
@@ -74,7 +123,8 @@ export function AgentPanel({
       setDecisions(data.decisions);
       setAnswers({});
       onUpdated({ decisions: data.decisions });
-      notifyOk("Decisiones guardadas: van a ir en el prompt");
+      if (data.github.error) notifyError(new Error(`Se guardaron, pero no se pudieron comentar en GitHub: ${data.github.error}`));
+      else notifyOk(data.github.posted ? "Respuestas enviadas al issue: Claude sigue desde ahí" : "Decisiones guardadas: van a ir en el prompt");
     } catch (error) {
       notifyError(error);
     } finally {
@@ -110,16 +160,37 @@ export function AgentPanel({
             Todavía no se analizó.
           </Text>
         )}
-        <Button
-          size="xs"
-          variant={triage ? "default" : "filled"}
-          leftSection={<IconSparkles size={14} />}
-          onClick={analyze}
-          loading={busy === "analyze"}
-          disabled={!mine || busy !== null}
-        >
-          {triage ? "Volver a analizar" : "Analizar con Claude"}
-        </Button>
+        <Group gap={0} wrap="nowrap">
+          <Button
+            size="xs"
+            variant={triage ? "default" : "filled"}
+            leftSection={<IconSparkles size={14} />}
+            onClick={openManual}
+            disabled={!mine || busy !== null}
+            style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+          >
+            {triage ? "Volver a analizar" : "Analizar con Claude"}
+          </Button>
+          <Menu position="bottom-end" withinPortal>
+            <Menu.Target>
+              <Button
+                size="xs"
+                variant={triage ? "default" : "filled"}
+                px={6}
+                disabled={!mine || busy !== null}
+                loading={busy === "analyze"}
+                style={{ borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeft: "1px solid rgba(255,255,255,.3)" }}
+                aria-label="Otras formas de analizar"
+              >
+                <IconChevronDown size={14} />
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item onClick={openManual}>Con tu plan (copiar y pegar)</Menu.Item>
+              <Menu.Item onClick={analyze}>Con tu API key (automático)</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Group>
       </Group>
 
       {triage && (
@@ -196,10 +267,72 @@ export function AgentPanel({
             </Paper>
           ))}
           <Text size="xs" c="dimmed">
-            Van en el prompt como «Decisiones tomadas». Si te queda algo nuevo, volvé a analizar.
+            {ticket.github_issue
+              ? "Van en el prompt y se comentan en el issue de GitHub para que Claude siga."
+              : "Van en el prompt como «Decisiones tomadas». Si te queda algo nuevo, volvé a analizar."}
           </Text>
         </Stack>
       )}
+
+      <GithubSection
+        ticket={ticket}
+        me={me}
+        repos={repos}
+        clientContext={clientContext}
+        activity={activity}
+        onUpdated={onUpdated}
+      />
+
+      <Modal opened={manualOpen} onClose={() => setManualOpen(false)} title={`Analizar el ticket #${ticket.number} con tu plan`} size="xl">
+        <Stack gap="sm">
+          <Text size="sm">
+            <b>1.</b> Copiá este prompt y pegalo en Claude (claude.ai o Claude Code).
+          </Text>
+          <Textarea
+            value={manualPrompt}
+            readOnly
+            autosize
+            minRows={6}
+            maxRows={10}
+            styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)", fontSize: 12 } }}
+          />
+          <Group justify="flex-end">
+            <CopyButton value={manualPrompt}>
+              {({ copied, copy }) => (
+                <Button
+                  size="xs"
+                  variant="light"
+                  onClick={copy}
+                  color={copied ? "teal" : undefined}
+                  leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                >
+                  {copied ? "Copiado" : "Copiar prompt"}
+                </Button>
+              )}
+            </CopyButton>
+          </Group>
+          <Text size="sm">
+            <b>2.</b> Pegá acá la respuesta completa de Claude.
+          </Text>
+          <Textarea
+            placeholder={'```json\n{ "verdict": "needs_decision", "summary": "…", "questions": [ … ] }\n```'}
+            autosize
+            minRows={4}
+            maxRows={10}
+            value={reply}
+            onChange={(e) => setReply(e.currentTarget.value)}
+            styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)", fontSize: 12 } }}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setManualOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={saveManual} loading={busy === "manual"} disabled={!reply.trim()}>
+              Guardar análisis
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

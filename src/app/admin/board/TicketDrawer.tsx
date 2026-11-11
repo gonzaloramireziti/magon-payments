@@ -30,6 +30,7 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import {
   IconArrowBackUp,
+  IconBrandGithub,
   IconArrowRight,
   IconCheck,
   IconCircleCheck,
@@ -129,6 +130,19 @@ function activityText(item: Activity): React.ReactNode {
     );
   }
   if (item.kind === "decision") return <>respondió preguntas del análisis</>;
+  if (item.kind === "github") {
+    const url = typeof item.meta.url === "string" ? item.meta.url : null;
+    return url ? (
+      <>
+        actualizó GitHub:{" "}
+        <Anchor href={url} target="_blank" rel="noreferrer" size="sm">
+          {url.replace("https://github.com/", "")}
+        </Anchor>
+      </>
+    ) : (
+      <>actualizó GitHub</>
+    );
+  }
   if (item.kind === "labels") {
     const labels = (meta.to as string[]) ?? [];
     return labels.length ? (
@@ -151,6 +165,7 @@ const ACTIVITY_ICON = {
   created: IconPencilPlus,
   triage: IconRobot,
   decision: IconCircleCheck,
+  github: IconBrandGithub,
 };
 
 export function TicketDrawer({
@@ -159,6 +174,7 @@ export function TicketDrawer({
   users,
   labelOptions,
   clientContext,
+  clientRepos,
   onClose,
   onChange,
   onLocalUpdate,
@@ -168,6 +184,7 @@ export function TicketDrawer({
   users: PanelUser[];
   labelOptions: string[];
   clientContext: string | null;
+  clientRepos: string[];
   onClose: () => void;
   onChange: (id: string, changes: TicketChanges) => Promise<void>;
   onLocalUpdate: (id: string, changes: Partial<Ticket>) => void;
@@ -573,6 +590,9 @@ export function TicketDrawer({
           <AgentPanel
             ticket={ticket}
             me={me}
+            activity={activity ?? []}
+            clientContext={clientContext}
+            repos={clientRepos}
             onUpdated={(changes) => {
               onLocalUpdate(ticket.id, changes);
               void loadActivity();
@@ -637,7 +657,7 @@ export function TicketDrawer({
                         <b>{item.authorName ?? "Alguien"}</b>{" "}
                         {item.kind === "comment" ? "comentó" : activityText(item)}
                       </Text>
-                      {(item.kind === "comment" || item.kind === "triage" || item.kind === "decision") && item.body && (
+                      {(item.kind === "comment" || item.kind === "triage" || item.kind === "decision" || item.kind === "github") && item.body && (
                         <Paper p="xs" mt={4} bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))">
                           <Prose value={item.body} />
                         </Paper>

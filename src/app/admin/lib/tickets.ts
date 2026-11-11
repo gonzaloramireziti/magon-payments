@@ -34,7 +34,11 @@ export type Ticket = {
   // Análisis del agente y respuestas del equipo (migración 009; pueden faltar antes).
   triage?: TriageResult | null;
   decisions?: Decision[];
+  // Issue en el repo del cliente donde trabaja Claude Code (migración 010).
+  github_issue?: GithubIssueLink | null;
 };
+
+export type GithubIssueLink = { repo: string; number: number; url: string; createdAt: string; createdBy: string };
 
 export type TriageQuestion = { id: string; kind: "negocio" | "tecnica" | "cliente"; question: string; why: string };
 export type TriageResult = {
@@ -49,7 +53,7 @@ export type Decision = { questionId: string | null; question: string; answer: st
 
 export type Activity = {
   id: string;
-  kind: "comment" | "status" | "assignee" | "urgency" | "labels" | "created" | "triage" | "decision";
+  kind: "comment" | "status" | "assignee" | "urgency" | "labels" | "created" | "triage" | "decision" | "github";
   authorName: string | null;
   body: string | null;
   meta: Record<string, unknown>;

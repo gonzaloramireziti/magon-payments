@@ -1,11 +1,14 @@
 // Arma el prompt para resolver un ticket con un agente (Claude Code). Función pura: se prueba sola.
 import { STATUS_LABEL, URGENCY, type Activity, type Ticket } from "../lib/tickets";
+import { QUESTIONS_MARKER, TRIAGE_REPLY_FORMAT } from "../../../lib/triage/message";
 
 export type PromptOptions = {
   // Contexto técnico del cliente (proyecto, carpeta, stack, agente), cargado en Clientes.
   clientContext: string | null;
   comments: Activity[];
   includeComments: boolean;
+  // "local": para pegarle al agente de Herdr. "github": cuerpo del issue donde trabaja la Action.
+  mode?: "local" | "github";
 };
 
 function slug(text: string): string {
@@ -58,7 +61,9 @@ export function buildTicketPrompt(ticket: Ticket, options: PromptOptions): strin
   push(`- Urgencia indicada por el cliente: ${URGENCY[ticket.urgency].label}`);
   push(`- Estado actual: ${STATUS_LABEL[ticket.status]}`);
   if (ticket.channel !== "default") push(`- Desde dónde se reportó: ${ticket.channel}`);
-  const reporter = [ticket.reporter_name, ticket.reporter_email, ticket.reporter_ref ? `ID ${ticket.reporter_ref}` : null]
+  const github = options.mode === "github";
+  // En GitHub no van los datos de contacto del cliente: el issue lo ve todo el que tenga acceso al repo.
+  const reporter = (github ? [ticket.reporter_name] : [ticket.reporter_name, ticket.reporter_email, ticket.reporter_ref ? `ID ${ticket.reporter_ref}` : null])
     .filter(Boolean)
     .join(" · ");
   if (reporter) push(`- Reportado por: ${reporter}`);
@@ -94,6 +99,34 @@ export function buildTicketPrompt(ticket: Ticket, options: PromptOptions): strin
     push("## Decisiones tomadas", "", "El equipo ya definió esto: respetalo tal cual.", "");
     for (const d of decisions) push(`- ${d.question}`, `  → ${d.answer.replace(/\n+/g, " ")}`);
     push("");
+  }
+
+  if (github) {
+    push("## Cómo trabajar", "");
+    push("1. Leé el `CLAUDE.md` del repo antes de empezar y respetá su stack y sus convenciones.");
+    push(
+      "2. Antes de tocar código, fijate si queda alguna decisión de negocio o técnica sin resolver (las resueltas están en «Decisiones tomadas»), o si falta información que solo tiene el cliente."
+    );
+    push(
+      `   Si es así, **no cambies código**: terminá tu comentario con una línea \`<!-- ${QUESTIONS_MARKER} -->\` seguida del bloque JSON de abajo, y esperá. El equipo te va a responder en este issue.`
+    );
+    push(
+      bug
+        ? "3. Si no hay dudas: reproducí el problema y encontrá la causa raíz antes de cambiar nada. Hacé el cambio mínimo que lo resuelve, sin refactors ajenos al ticket."
+        : "3. Si no hay dudas: definí el alcance y los criterios de aceptación e implementalo siguiendo los patrones que ya existen en el repo."
+    );
+    push("4. Corré el build, el lint y los tests que tenga el repo. Si algo falla, mostrá la salida real.");
+    push("5. Pusheá la rama con los cambios. No abras el PR ni mergees: el equipo lo revisa y lo crea desde el panel.");
+    push("");
+    push("### Formato de las preguntas", "", TRIAGE_REPLY_FORMAT, "");
+    push("## Entregable (en tu comentario)", "");
+    push(
+      bug ? "- Causa del problema, en una o dos oraciones." : "- Alcance implementado y criterios de aceptación.",
+      "- Archivos modificados y qué cambió en cada uno.",
+      "- Cómo probarlo paso a paso.",
+      "- Dudas o riesgos pendientes."
+    );
+    return lines.join("\n");
   }
 
   push("## Cómo trabajar", "");

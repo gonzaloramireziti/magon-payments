@@ -86,3 +86,76 @@ export function pendingQuestions(triage: TriageResult | null, decisions: Decisio
   if (!triage) return [];
   return triage.questions.filter((q) => !decisions.some((d) => d.questionId === q.id));
 }
+
+// --- Análisis sin API: el prompt se pega en Claude (con el plan de cada uno) y la respuesta vuelve al panel.
+// El mismo formato lo usa el agente de GitHub para dejar sus preguntas en el issue.
+
+export const QUESTIONS_MARKER = "magon:analisis";
+
+export const TRIAGE_REPLY_FORMAT = `Respondé con un único bloque de código JSON, sin texto antes ni después, con esta forma:
+
+\`\`\`json
+{
+  "verdict": "direct" | "needs_decision",
+  "summary": "qué hay que hacer, en una o dos oraciones",
+  "questions": [
+    { "kind": "negocio" | "tecnica" | "cliente", "question": "la pregunta", "why": "por qué hace falta saberlo" }
+  ]
+}
+\`\`\`
+
+Si es "direct", "questions" va vacío.`;
+
+export function buildManualTriagePrompt(input: TriageInput): string {
+  return [TRIAGE_SYSTEM, "", "---", "", buildTriageMessage(input), "", TRIAGE_REPLY_FORMAT].join("\n");
+}
+
+type ParsedTriage = { verdict: "direct" | "needs_decision"; summary: string; questions: TriageQuestion[] };
+const KINDS = ["negocio", "tecnica", "cliente"];
+
+function extractJson(text: string): unknown {
+  const candidates: string[] = [];
+  for (const match of text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)) candidates.push(match[1]);
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first !== -1 && last > first) candidates.push(text.slice(first, last + 1));
+  for (const candidate of candidates.reverse()) {
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      /* se prueba el siguiente */
+    }
+  }
+  return null;
+}
+
+/** Valida la respuesta de Claude (pegada a mano o en un comentario de GitHub). */
+export function parseTriageReply(text: string, idPrefix = "q"): { ok: true; value: ParsedTriage } | { ok: false; error: string } {
+  const data = extractJson(text) as Record<string, unknown> | null;
+  if (!data || typeof data !== "object") {
+    return { ok: false, error: "No encontré el bloque JSON en la respuesta. Pegala completa." };
+  }
+  if (data.verdict !== "direct" && data.verdict !== "needs_decision") {
+    return { ok: false, error: "La respuesta no dice si es «direct» o «needs_decision»." };
+  }
+  const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+  if (!summary) return { ok: false, error: "La respuesta no trae el resumen («summary»)." };
+  const rawQuestions = Array.isArray(data.questions) ? data.questions : [];
+  const questions: TriageQuestion[] = [];
+  for (const raw of rawQuestions) {
+    const q = raw as Record<string, unknown>;
+    const question = typeof q?.question === "string" ? q.question.trim() : "";
+    if (!question) continue;
+    questions.push({
+      id: `${idPrefix}${questions.length + 1}`,
+      kind: (KINDS.includes(q.kind as string) ? q.kind : "tecnica") as TriageQuestion["kind"],
+      question: question.slice(0, 500),
+      why: (typeof q.why === "string" ? q.why.trim() : "").slice(0, 500),
+    });
+    if (questions.length === 6) break;
+  }
+  return {
+    ok: true,
+    value: { verdict: questions.length ? data.verdict : "direct", summary: summary.slice(0, 600), questions },
+  };
+}

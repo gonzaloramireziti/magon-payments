@@ -255,6 +255,8 @@ export type PublicTicket = {
   createdAt: string;
   updatedAt: string;
   resolvedAt: string | null;
+  // Mensaje del equipo al cerrar (motivo del descarte, nota de la resolución). Se escribe para el cliente.
+  note: string | null;
 };
 
 // Lo que ve el cliente de sus propios reportes: sin descripción ni notas internas, porque la
@@ -266,19 +268,26 @@ export async function listClientTickets(
 ): Promise<PublicTicket[]> {
   const { client } = await activeClientForKey(clientKey);
   const supabase = getSupabaseAdmin();
-  let query = supabase
-    .from("tickets")
-    .select("number,type,title,status,created_at,updated_at,resolved_at")
-    .eq("client_id", client.id)
-    .order("created_at", { ascending: false })
-    .limit(30);
   const ref = reporter.ref?.trim();
   const email = reporter.email?.trim().toLowerCase();
-  if (ref) query = query.eq("reporter_ref", ref.slice(0, 300));
-  else if (email) query = query.eq("reporter_email", email.slice(0, 300));
-  const { data, error } = await query;
+  const fetchRows = (columns: string) => {
+    let query = supabase
+      .from("tickets")
+      .select(columns)
+      .eq("client_id", client.id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (ref) query = query.eq("reporter_ref", ref.slice(0, 300));
+    else if (email) query = query.eq("reporter_email", email.slice(0, 300));
+    return query;
+  };
+  const base = "number,type,title,status,created_at,updated_at,resolved_at";
+  let { data, error } = await fetchRows(`${base},client_note`);
+  // Sin la migración 011 la columna no existe: se sigue mostrando la lista, sin el mensaje.
+  if (error && (error as { code?: string }).code === "42703") ({ data, error } = await fetchRows(base));
   if (error) throw error;
-  return (data ?? []).map((row) => ({
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  return rows.map((row) => ({
     number: Number(row.number),
     type: row.type as TicketType,
     title: row.title as string,
@@ -286,6 +295,8 @@ export async function listClientTickets(
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     resolvedAt: (row.resolved_at as string | null) ?? null,
+    // Solo en tickets cerrados: el mensaje que el equipo le dejó al cliente.
+    note: row.status === "done" || row.status === "discarded" ? ((row.client_note as string | null) ?? null) : null,
   }));
 }
 
@@ -497,6 +508,12 @@ export async function updateTicket(
   if (typeof raw.internalNotes === "string" || raw.internalNotes === null) {
     update.internal_notes = raw.internalNotes;
   }
+  // Mensaje para el cliente (motivo del descarte, nota de la resolución). Al reabrir se borra.
+  if (typeof raw.clientNote === "string" || raw.clientNote === null) {
+    update.client_note = typeof raw.clientNote === "string" ? raw.clientNote.trim().slice(0, LIMITS.text) || null : null;
+  } else if (update.status && update.status !== "done" && update.status !== "discarded" && update.status !== current.status) {
+    update.client_note = null;
+  }
   if (Object.keys(update).length === 0) {
     throw new TicketError("EMPTY_UPDATE", 400, "Nada para actualizar");
   }
@@ -513,7 +530,13 @@ export async function updateTicket(
   if (update.status && update.status !== current.status) {
     const info = await ticketForMessage(id);
     if (info?.reporter.email) {
-      await notifyReporterStatus(info.ticket, info.reporter, current.status as TicketStatus, update.status as TicketStatus);
+      await notifyReporterStatus(
+        info.ticket,
+        info.reporter,
+        current.status as TicketStatus,
+        update.status as TicketStatus,
+        (data.client_note as string | null) ?? null
+      );
     }
   }
   const newAssignee = update.assignee_id as string | null | undefined;

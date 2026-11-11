@@ -161,7 +161,8 @@ const STATUS_DETAIL: Record<string, string> = {
 export function buildReporterStatusEmail(
   ticket: Pick<TicketForMessage, "number" | "title" | "client_name">,
   reporterName: string | null,
-  to: string
+  to: string,
+  note: string | null = null
 ) {
   const label = CLIENT_STATUS_LABEL[to] ?? to;
   const hello = reporterName?.trim() ? `Hola ${reporterName.trim().split(/\s+/)[0]},` : "Hola,";
@@ -171,6 +172,7 @@ export function buildReporterStatusEmail(
       hello,
       "",
       `Tu reporte #${ticket.number} «${ticket.title}» cambió de estado: ahora está ${label.toUpperCase()}.`,
+      ...(note?.trim() ? ["", `${to === "discarded" ? "Motivo" : "Nota del equipo"}: ${note.trim()}`, ""] : []),
       STATUS_DETAIL[to] ?? "",
       "",
       "Podés seguirlo desde el botón «Reportar» de tu sistema, en la pestaña «Mis reportes».",

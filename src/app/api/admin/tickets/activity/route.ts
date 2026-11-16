@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { addComment, listActivity, TicketError } from "@/lib/tickets/service";
+import { messageClient } from "@/lib/tickets/conversation";
 import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
@@ -28,8 +29,14 @@ export async function POST(request: NextRequest) {
   if (session instanceof Response) return session;
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    await addComment(typeof body.ticketId === "string" ? body.ticketId : "", body.body, session);
-    return okJson({ activity: await listActivity(body.ticketId as string) });
+    const ticketId = typeof body.ticketId === "string" ? body.ticketId : "";
+    // { toClient: true, ask?: boolean }: mensaje que ve el cliente; con ask pasa a «Esperando al cliente».
+    if (body.toClient === true) {
+      const result = await messageClient(ticketId, body.body, body.ask === true, session);
+      return okJson({ activity: await listActivity(ticketId), ...result });
+    }
+    await addComment(ticketId, body.body, session);
+    return okJson({ activity: await listActivity(ticketId) });
   } catch (error) {
     return handleError(error);
   }

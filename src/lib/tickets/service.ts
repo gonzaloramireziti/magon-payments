@@ -68,7 +68,7 @@ export class TicketError extends Error {
   }
 }
 
-async function activeClientForKey(clientKey: string) {
+export async function activeClientForKey(clientKey: string) {
   const client = await findClientByKey(clientKey);
   if (!client) throw new TicketError("CLIENT_NOT_FOUND", 404, "Cliente no encontrado");
   if (!client.active) throw new TicketError("CLIENT_INACTIVE", 403, "Cliente inactivo");
@@ -257,7 +257,38 @@ export type PublicTicket = {
   resolvedAt: string | null;
   // Mensaje del equipo al cerrar (motivo del descarte, nota de la resolución). Se escribe para el cliente.
   note: string | null;
+  // Conversación con el cliente (migración 013): preguntas del equipo y respuestas del cliente.
+  messages: ClientMessage[];
 };
+
+export type ClientMessage = { from: "team" | "client"; author: string | null; body: string; at: string };
+
+/** Mensajes visibles para el cliente de varios tickets, agrupados por ticket. */
+async function clientMessages(ticketIds: string[]): Promise<Map<string, ClientMessage[]>> {
+  const byTicket = new Map<string, ClientMessage[]>();
+  if (!ticketIds.length) return byTicket;
+  const { data, error } = await getSupabaseAdmin()
+    .from("ticket_activity")
+    .select("ticket_id,kind,author_name,body,created_at")
+    .in("ticket_id", ticketIds)
+    .in("kind", ["to_client", "client_reply"])
+    .order("created_at", { ascending: true })
+    .limit(1000);
+  // Sin la migración 013 no hay mensajes: la lista se muestra igual.
+  if (error) return byTicket;
+  for (const row of data ?? []) {
+    const list = byTicket.get(row.ticket_id as string) ?? [];
+    list.push({
+      from: row.kind === "client_reply" ? "client" : "team",
+      // Del equipo no se muestra el nombre de la persona: firma "Equipo" en el widget.
+      author: row.kind === "client_reply" ? ((row.author_name as string | null) ?? null) : null,
+      body: (row.body as string | null) ?? "",
+      at: row.created_at as string,
+    });
+    byTicket.set(row.ticket_id as string, list);
+  }
+  return byTicket;
+}
 
 // Lo que ve el cliente de sus propios reportes: sin descripción ni notas internas, porque la
 // KEY viaja en el front y cualquiera con ella podría leerlos. Con `reporter` se filtran los del
@@ -281,12 +312,13 @@ export async function listClientTickets(
     else if (email) query = query.eq("reporter_email", email.slice(0, 300));
     return query;
   };
-  const base = "number,type,title,status,created_at,updated_at,resolved_at";
+  const base = "id,number,type,title,status,created_at,updated_at,resolved_at";
   let { data, error } = await fetchRows(`${base},client_note`);
   // Sin la migración 011 la columna no existe: se sigue mostrando la lista, sin el mensaje.
   if (error && (error as { code?: string }).code === "42703") ({ data, error } = await fetchRows(base));
   if (error) throw error;
   const rows = (data ?? []) as unknown as Array<Record<string, unknown>>;
+  const messages = await clientMessages(rows.map((row) => row.id as string));
   return rows.map((row) => ({
     number: Number(row.number),
     type: row.type as TicketType,
@@ -297,6 +329,7 @@ export async function listClientTickets(
     resolvedAt: (row.resolved_at as string | null) ?? null,
     // Solo en tickets cerrados: el mensaje que el equipo le dejó al cliente.
     note: row.status === "done" || row.status === "discarded" ? ((row.client_note as string | null) ?? null) : null,
+    messages: messages.get(row.id as string) ?? [],
   }));
 }
 
@@ -398,7 +431,7 @@ export async function listAdminTickets(includeDiscarded: boolean): Promise<Admin
   );
 }
 
-async function ticketForMessage(id: string) {
+export async function ticketForMessage(id: string) {
   const { data } = await getSupabaseAdmin()
     .from("tickets")
     .select("id,number,title,type,urgency,assignee_id,reporter_name,reporter_email,clients(name)")
@@ -423,9 +456,18 @@ async function ticketForMessage(id: string) {
   };
 }
 
-type ActivityKind = "comment" | "status" | "assignee" | "urgency" | "labels" | "created";
+export type ActivityKind =
+  | "comment"
+  | "status"
+  | "assignee"
+  | "urgency"
+  | "labels"
+  | "created"
+  // Conversación con el cliente (migración 013): lo que le escribe el equipo y lo que responde.
+  | "to_client"
+  | "client_reply";
 
-async function recordActivity(
+export async function recordActivity(
   ticketId: string,
   actor: AdminSession,
   kind: ActivityKind,
@@ -526,8 +568,9 @@ export async function updateTicket(
     .single();
   if (error) throw error;
   for (const event of events) await recordActivity(id, actor, event.kind, null, event.meta);
-  // Al cliente que lo reportó le avisa el cambio de estado por correo (si dejó email).
-  if (update.status && update.status !== current.status) {
+  // Al cliente que lo reportó le avisa el cambio de estado por correo (si dejó email). El pase a
+  // "Esperando al cliente" no: lo avisa el mensaje con la pregunta (conversation.ts).
+  if (update.status && update.status !== current.status && update.status !== "waiting") {
     const info = await ticketForMessage(id);
     if (info?.reporter.email) {
       await notifyReporterStatus(

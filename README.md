@@ -59,6 +59,9 @@ npm run dev                  # http://localhost:3000
 > agrega `admin_users.role` (los usuarios que ya existían quedan como administradores) y la tabla
 > `time_entries`. Sin esta migración todos siguen siendo admin y la sección Horas avisa que falta.
 
+> Para la conversación con el cliente en los tickets, ejecutá `supabase/migrations/013_client_conversation.sql`:
+> agrega el estado «Esperando al cliente» y los mensajes que ve y responde el cliente desde «Mis reportes».
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno
@@ -186,6 +189,11 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    hasta 20.000 caracteres y «Limpiar formato de WhatsApp» saca fecha, hora y nombre de cada mensaje
    de una conversación copiada o exportada. No aplica la política de tipos del cliente ni el límite
    por hora del widget. El borrador queda guardado en el navegador hasta que se carga o se vacía.
+7. **Pedir información al cliente:** en el ticket, «Pedir información» (o *Actividad → Mensaje al cliente*).
+   El cliente lo ve en «Mis reportes» (y le llega por correo si dejó email) y responde ahí mismo. Con
+   «Es una pregunta» el ticket pasa a *Esperando al cliente*; cuando responde, vuelve a *En análisis*
+   y le avisa al responsable. Si se descartó por falta de información, el cliente también puede
+   responder y el ticket se reabre. Las notas internas siguen sin verse.
 7. **Mi día:** pantalla de inicio de cada usuario: sus tickets ordenados (para probar, en desarrollo,
    listos), las preguntas del agente que esperan respuesta, los tickets sin responsable (con botón para
    tomarlos), las horas de hoy y de la semana y, para los administradores, el estado de los cobros.

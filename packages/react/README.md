@@ -136,6 +136,13 @@ Qué tipos se pueden cargar lo decide el servidor según el cliente y el `channe
 (`clients.support_policy`): si un canal solo admite problemas, el formulario no ofrece pedir
 funcionalidades. Las capturas se pueden adjuntar o pegar con Ctrl+V y se achican antes de subir.
 
+**Conversación (1.5.0):** si el equipo necesita más información, le escribe desde el panel y el
+reporte queda en «Necesitamos tu respuesta». En «Mis reportes» el usuario ve los mensajes y responde
+ahí mismo; también puede agregar información a un reporte cerrado sin cambios. Al responder, el
+reporte vuelve a análisis. Los mensajes nuevos del equipo avisan igual que un cambio de estado.
+Pasá `reporter` (sobre todo `id` o `email`): sin identidad, solo puede responder desde el navegador
+donde cargó el reporte.
+
 | Prop | Tipo | Default | Descripción |
 | --- | --- | --- | --- |
 | `clientKey` | `string` | — | KEY del cliente (obligatoria) |

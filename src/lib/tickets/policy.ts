@@ -10,6 +10,8 @@ export type TicketUrgency = (typeof TICKET_URGENCIES)[number];
 export const TICKET_STATUSES = [
   "new",
   "analysis",
+  // Esperando al cliente: le pedimos información (migración 013).
+  "waiting",
   "ready",
   "in_progress",
   "testing",

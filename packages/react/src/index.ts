@@ -28,6 +28,7 @@ export type {
   MagonSupportLabels,
   MagonSupportReporter,
   MagonClientTicket,
+  MagonTicketMessage,
   MagonTicketType,
   MagonTicketUrgency,
   MagonTicketStatus,

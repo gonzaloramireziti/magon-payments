@@ -18,6 +18,7 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  SegmentedControl,
   Switch,
   Tabs,
   TagsInput,
@@ -47,8 +48,11 @@ import {
   IconTag,
   IconUser,
   IconClockHour4,
+  IconMessageQuestion,
+  IconMessageReply,
+  IconSend,
 } from "@tabler/icons-react";
-import { api, notifyError } from "../lib/api";
+import { api, notifyError, notifyOk } from "../lib/api";
 import { dateTime, initials, relative } from "../lib/format";
 import {
   COLUMNS,
@@ -132,6 +136,8 @@ function activityText(item: Activity): React.ReactNode {
     );
   }
   if (item.kind === "decision") return <>respondió preguntas del análisis</>;
+  if (item.kind === "to_client") return item.meta.ask ? <>le pidió información al cliente</> : <>le escribió al cliente</>;
+  if (item.kind === "client_reply") return <>respondió (cliente)</>;
   if (item.kind === "github") {
     const url = typeof item.meta.url === "string" ? item.meta.url : null;
     return url ? (
@@ -168,6 +174,8 @@ const ACTIVITY_ICON = {
   triage: IconRobot,
   decision: IconCircleCheck,
   github: IconBrandGithub,
+  to_client: IconSend,
+  client_reply: IconMessageReply,
 };
 
 export function TicketDrawer({
@@ -195,6 +203,9 @@ export function TicketDrawer({
   const [tab, setTab] = useState<string | null>("detalle");
   const [activity, setActivity] = useState<Activity[] | null>(null);
   const [comment, setComment] = useState("");
+  // A quién va lo que se escribe en Actividad: nota interna o mensaje que ve el cliente.
+  const [audience, setAudience] = useState<"internal" | "client">("internal");
+  const [ask, setAsk] = useState(true);
   const [sending, setSending] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
   const [includeComments, setIncludeComments] = useState(true);
@@ -218,6 +229,8 @@ export function TicketDrawer({
   useEffect(() => {
     setActivity(null);
     setComment("");
+    setAudience("internal");
+    setAsk(true);
     setTab("detalle");
     setPromptOpen(false);
     setDiscardOpen(false);
@@ -243,12 +256,22 @@ export function TicketDrawer({
     if (!comment.trim()) return;
     setSending(true);
     try {
-      const data = await api<{ activity: Activity[] }>("/api/admin/tickets/activity", {
-        method: "POST",
-        json: { ticketId: ticket!.id, body: comment },
-      });
+      const toClient = audience === "client";
+      const data = await api<{ activity: Activity[]; emailed?: boolean; status?: Ticket["status"] }>(
+        "/api/admin/tickets/activity",
+        { method: "POST", json: { ticketId: ticket!.id, body: comment, ...(toClient ? { toClient: true, ask } : {}) } }
+      );
       setActivity(data.activity);
       setComment("");
+      if (toClient) {
+        if (data.status && data.status !== ticket!.status) onLocalUpdate(ticket!.id, { status: data.status });
+        notifyOk(
+          data.emailed
+            ? "Mensaje enviado: lo ve en «Mis reportes» y le llegó por correo"
+            : "Mensaje enviado: lo ve en «Mis reportes» (no dejó correo)"
+        );
+        setAudience("internal");
+      }
     } catch (error) {
       notifyError(error);
     } finally {
@@ -259,7 +282,14 @@ export function TicketDrawer({
   const reporter = [ticket.reporter_name, ticket.reporter_email, ticket.reporter_ref ? `ID ${ticket.reporter_ref}` : null]
     .filter(Boolean)
     .join(" · ");
-  const comments = activity?.filter((item) => item.kind === "comment").length ?? 0;
+  const comments =
+    activity?.filter((item) => item.kind === "comment" || item.kind === "to_client" || item.kind === "client_reply").length ?? 0;
+
+  function askClient() {
+    setTab("actividad");
+    setAudience("client");
+    setAsk(true);
+  }
 
   // El motivo queda como comentario (así se sabe por qué no se hizo) y, si se elige, como mensaje
   // para el cliente: lo ve en «Mis reportes» y va en el correo del cambio de estado.
@@ -343,6 +373,15 @@ export function TicketDrawer({
                   onClick={() => void change({ status: "done" })}
                 >
                   Resolver
+                </Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="yellow"
+                  leftSection={<IconMessageQuestion size={14} />}
+                  onClick={askClient}
+                >
+                  Pedir información
                 </Button>
                 <Button
                   size="xs"
@@ -629,8 +668,22 @@ export function TicketDrawer({
         <Tabs.Panel value="actividad" p="md">
           <Stack gap="md">
             <Paper p="sm">
+              <SegmentedControl
+                size="xs"
+                mb="xs"
+                value={audience}
+                onChange={(value) => setAudience(value as "internal" | "client")}
+                data={[
+                  { value: "internal", label: "Nota interna" },
+                  { value: "client", label: "Mensaje al cliente" },
+                ]}
+              />
               <Textarea
-                placeholder="Escribí un comentario interno (el cliente no lo ve)…"
+                placeholder={
+                  audience === "client"
+                    ? "Escribile al cliente: lo ve en «Mis reportes» y puede responder ahí mismo…"
+                    : "Escribí un comentario interno (el cliente no lo ve)…"
+                }
                 autosize
                 minRows={2}
                 maxRows={8}
@@ -641,11 +694,27 @@ export function TicketDrawer({
                 }}
               />
               <Group justify="space-between" mt="xs">
-                <Text size="xs" c="dimmed">
-                  Ctrl + Enter para enviar
-                </Text>
-                <Button size="xs" onClick={sendComment} loading={sending} disabled={!comment.trim()}>
-                  Comentar
+                {audience === "client" ? (
+                  <Switch
+                    size="xs"
+                    checked={ask}
+                    onChange={(event) => setAsk(event.currentTarget.checked)}
+                    label="Es una pregunta: pasa a «Esperando al cliente»"
+                  />
+                ) : (
+                  <Text size="xs" c="dimmed">
+                    Ctrl + Enter para enviar
+                  </Text>
+                )}
+                <Button
+                  size="xs"
+                  onClick={sendComment}
+                  loading={sending}
+                  disabled={!comment.trim()}
+                  color={audience === "client" ? "yellow" : undefined}
+                  leftSection={audience === "client" ? <IconSend size={14} /> : undefined}
+                >
+                  {audience === "client" ? "Enviar al cliente" : "Comentar"}
                 </Button>
               </Group>
             </Paper>
@@ -668,7 +737,7 @@ export function TicketDrawer({
                     <Timeline.Item
                       key={item.id}
                       bullet={
-                        item.kind === "comment" ? (
+                        item.kind === "comment" || item.kind === "to_client" ? (
                           <Avatar size={24} radius="xl" color="brand">
                             <Text fz={10} fw={700}>
                               {initials(item.authorName)}
@@ -682,9 +751,28 @@ export function TicketDrawer({
                       <Text size="sm">
                         <b>{item.authorName ?? "Alguien"}</b>{" "}
                         {item.kind === "comment" ? "comentó" : activityText(item)}
+                        {item.kind === "to_client" && (
+                          <Badge size="xs" ml={6} color="yellow" variant="light">
+                            visible para el cliente
+                          </Badge>
+                        )}
                       </Text>
-                      {(item.kind === "comment" || item.kind === "triage" || item.kind === "decision" || item.kind === "github") && item.body && (
-                        <Paper p="xs" mt={4} bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))">
+                      {(item.kind === "comment" ||
+                        item.kind === "triage" ||
+                        item.kind === "decision" ||
+                        item.kind === "github" ||
+                        item.kind === "to_client" ||
+                        item.kind === "client_reply") &&
+                        item.body && (
+                        <Paper
+                          p="xs"
+                          mt={4}
+                          bg={
+                            item.kind === "client_reply"
+                              ? "light-dark(var(--mantine-color-yellow-0), rgba(250, 176, 5, 0.12))"
+                              : "light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))"
+                          }
+                        >
                           <Prose value={item.body} />
                         </Paper>
                       )}

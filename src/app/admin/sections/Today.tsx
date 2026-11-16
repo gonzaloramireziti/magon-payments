@@ -24,7 +24,7 @@ import { StatCard } from "./StatCard";
 import { EntryRow, LogTimeModal } from "./TimeWidgets";
 
 // Orden de lo que tengo para hacer: lo que espera que pruebe, después lo que estoy haciendo y lo listo.
-const STATUS_ORDER: Record<string, number> = { testing: 0, in_progress: 1, ready: 2, analysis: 3, new: 4 };
+const STATUS_ORDER: Record<string, number> = { testing: 0, in_progress: 1, ready: 2, analysis: 3, new: 4, waiting: 5 };
 
 /** Preguntas del análisis que todavía no tienen respuesta en las decisiones. */
 export function pendingQuestions(ticket: Ticket): number {

@@ -108,6 +108,8 @@ export function resolvedWithin(
 const AGING_HOURS: Partial<Record<TicketStatus, { warn: number; late: number }>> = {
   new: { warn: 24, late: 72 },
   analysis: { warn: 72, late: 168 },
+  // Si el cliente no contesta en unos días, hay que insistirle o cerrarlo.
+  waiting: { warn: 72, late: 168 },
   ready: { warn: 72, late: 168 },
   in_progress: { warn: 72, late: 168 },
   testing: { warn: 48, late: 120 },

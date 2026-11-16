@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Crea el PR desde la rama de Claude. Body: { ticketId, branch }
+// Crea el PR desde una rama del agente. Body: { ticketId, repo, branch }
 export async function PUT(request: NextRequest) {
   const session = getAdminSession(request);
   if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
@@ -59,7 +59,7 @@ export async function PUT(request: NextRequest) {
   const ticketId = typeof body.ticketId === "string" ? body.ticketId : "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");
   try {
-    return okJson({ pull: await createPull(ticketId, body.branch, session) });
+    return okJson({ pull: await createPull(ticketId, body.repo, body.branch, session) });
   } catch (error) {
     return handleError(error);
   }

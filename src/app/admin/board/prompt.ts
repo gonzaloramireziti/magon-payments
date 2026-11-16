@@ -1,6 +1,6 @@
 // Arma el prompt para resolver un ticket con un agente (Claude Code). Función pura: se prueba sola.
 import { STATUS_LABEL, URGENCY, type Activity, type Ticket } from "../lib/tickets";
-import { QUESTIONS_MARKER, TRIAGE_REPLY_FORMAT } from "../../../lib/triage/message";
+import { PLAN_MARKER, PLAN_REPLY_FORMAT, QUESTIONS_MARKER, TRIAGE_REPLY_FORMAT } from "../../../lib/triage/message";
 
 export type PromptOptions = {
   // Contexto técnico del cliente (proyecto, carpeta, stack, agente), cargado en Clientes.
@@ -9,6 +9,9 @@ export type PromptOptions = {
   includeComments: boolean;
   // "local": para pegarle al agente de Herdr. "github": cuerpo del issue donde trabaja la Action.
   mode?: "local" | "github";
+  // Modo github: repo donde se abre el issue y los demás repos del cliente ("owner/nombre[@rama]").
+  primaryRepo?: string | null;
+  otherRepos?: string[];
 };
 
 function slug(text: string): string {
@@ -102,28 +105,45 @@ export function buildTicketPrompt(ticket: Ticket, options: PromptOptions): strin
   }
 
   if (github) {
+    const others = options.otherRepos ?? [];
+    const repoName = (entry: string) => entry.split("@")[0];
+    if (options.primaryRepo) {
+      push("## Repositorios del cliente", "");
+      push(`- \`${repoName(options.primaryRepo)}\`: **este repo**, donde trabajás.`);
+      for (const o of others) {
+        push(`- \`${repoName(o)}\`: copia de solo lectura en \`_repos/${repoName(o).split("/")[1]}\` (si no está, seguí con lo que tengas).`);
+      }
+      push("");
+    }
     push("## Cómo trabajar", "");
-    push("1. Leé el `CLAUDE.md` del repo antes de empezar y respetá su stack y sus convenciones.");
+    push(`1. Leé el \`CLAUDE.md\` de este repo${others.length ? " y el de los otros en `_repos/`" : ""}, y respetá su stack y sus convenciones.`);
     push(
-      "2. Antes de tocar código, fijate si queda alguna decisión de negocio o técnica sin resolver (las resueltas están en «Decisiones tomadas»), o si falta información que solo tiene el cliente."
+      `2. Analizá el ticket${others.length ? " mirando todos los repos que hagan falta (por ejemplo back y front)" : ""}. Fijate si queda alguna decisión de negocio o técnica sin resolver (las resueltas están en «Decisiones tomadas»), o si falta información que solo tiene el cliente.`
     );
     push(
-      `   Si es así, **no cambies código**: terminá tu comentario con una línea \`<!-- ${QUESTIONS_MARKER} -->\` seguida del bloque JSON de abajo, y esperá. El equipo te va a responder en este issue.`
+      `   Si es así, **no cambies código**: terminá tu comentario con una línea \`<!-- ${QUESTIONS_MARKER} -->\` seguida del bloque JSON de preguntas, y esperá. El equipo te va a responder en este issue.`
+    );
+    push(
+      `3. Si no hay dudas, publicá en tu comentario el plan: una línea \`<!-- ${PLAN_MARKER} -->\` seguida del bloque JSON del plan, con lo que hay que hacer en cada repo${others.length ? " y el contrato entre ellos (endpoints, campos, tipos)" : ""}.`
     );
     push(
       bug
-        ? "3. Si no hay dudas: reproducí el problema y encontrá la causa raíz antes de cambiar nada. Hacé el cambio mínimo que lo resuelve, sin refactors ajenos al ticket."
-        : "3. Si no hay dudas: definí el alcance y los criterios de aceptación e implementalo siguiendo los patrones que ya existen en el repo."
+        ? "4. Después implementá la parte de **este** repo: reproducí el problema, encontrá la causa raíz y hacé el cambio mínimo que lo resuelve, sin refactors ajenos al ticket."
+        : "4. Después implementá la parte de **este** repo siguiendo los patrones que ya existen."
     );
-    push("4. Corré el build, el lint y los tests que tenga el repo. Si algo falla, mostrá la salida real.");
-    push("5. Pusheá la rama con los cambios. No abras el PR ni mergees: el equipo lo revisa y lo crea desde el panel.");
+    if (others.length) {
+      push("   No modifiques `_repos/`: es solo para leer. La parte de cada otro repo la implementa otro agente en ese repo, siguiendo tu plan.");
+    }
+    push("5. Corré el build, el lint y los tests que tenga el repo. Si algo falla, mostrá la salida real.");
+    push("6. Pusheá la rama con los cambios. No abras el PR ni mergees: el equipo lo revisa y lo crea desde el panel.");
     push("");
     push("### Formato de las preguntas", "", TRIAGE_REPLY_FORMAT, "");
+    push("### Formato del plan", "", PLAN_REPLY_FORMAT, "");
     push("## Entregable (en tu comentario)", "");
     push(
       bug ? "- Causa del problema, en una o dos oraciones." : "- Alcance implementado y criterios de aceptación.",
-      "- Archivos modificados y qué cambió en cada uno.",
-      "- Cómo probarlo paso a paso.",
+      "- El plan (con el bloque JSON) y qué hiciste en este repo.",
+      "- Archivos modificados y cómo probarlo paso a paso.",
       "- Dudas o riesgos pendientes."
     );
     return lines.join("\n");

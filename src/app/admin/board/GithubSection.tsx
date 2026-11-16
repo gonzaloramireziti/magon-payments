@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Anchor, Badge, Button, Group, Modal, Paper, Select, Stack, Text, Textarea } from "@mantine/core";
-import { IconBrandGithub, IconGitPullRequest, IconRefresh } from "@tabler/icons-react";
+import { IconBrandGithub, IconGitPullRequest, IconPencil, IconRefresh, IconSparkles } from "@tabler/icons-react";
 import { api, notifyError, notifyOk, type ApiError } from "../lib/api";
 import { relative } from "../lib/format";
 import { Markdown } from "../sections/Docs";
@@ -11,15 +11,22 @@ import { buildTicketPrompt } from "./prompt";
 
 type Status = {
   issue: { repo: string; number: number; url: string; state: string; title: string };
-  comments: Array<{ id: number; user: string; bot: boolean; body: string; url: string; createdAt: string }>;
+  plan: { summary: string; contract: string; repos: Array<{ repo: string; tasks: string[] }> } | null;
+  tasks: Array<{ repo: string; number: number; url: string; state: string }>;
+  comments: Array<{ id: number; repo: string; user: string; bot: boolean; body: string; url: string; createdAt: string }>;
   branches: Array<{
+    repo: string;
     name: string;
     url: string;
     pull: { number: number; url: string; state: string; merged: boolean; draft: boolean } | null;
   }>;
   triage: TriageResult | null;
   decisions: Decision[];
+  dispatchError: string | null;
 };
+
+// Mientras el agente trabaja, el panel consulta GitHub solo (las preguntas y el plan aparecen sin tocar nada).
+const POLL_MS = 30_000;
 
 function pullBadge(pull: NonNullable<Status["branches"][number]["pull"]>) {
   if (pull.merged) return { label: "Mergeado", color: "grape" };
@@ -73,31 +80,50 @@ export function GithubSection({
     // onUpdated cambia en cada render del drawer: no debe disparar otra lectura.
   }, [ticket.id, link?.number]);
 
+  const hasIssue = Boolean(link);
   useEffect(() => {
     setStatus(null);
     setError(null);
     void refresh();
-  }, [refresh]);
+    if (!hasIssue) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, POLL_MS);
+    return () => window.clearInterval(timer);
+    // Depende de que haya issue, no del objeto: la lista de tickets se recarga cada 20 s con objetos nuevos.
+  }, [refresh, hasIssue]);
 
   useEffect(() => setRepo(repos[0] ?? null), [repos]);
 
+  function promptFor(primary: string | null) {
+    return buildTicketPrompt(ticket, {
+      clientContext,
+      comments: activity,
+      includeComments: true,
+      mode: "github",
+      primaryRepo: primary,
+      otherRepos: repos.filter((r) => r !== primary),
+    });
+  }
+
   function openSend() {
-    setPrompt(buildTicketPrompt(ticket, { clientContext, comments: activity, includeComments: true, mode: "github" }));
+    setPrompt(promptFor(repo));
     setSendOpen(true);
   }
 
-  async function send() {
+  // Un solo botón: arma el prompt y abre el issue. El agente devuelve preguntas antes de tocar código.
+  async function send(customPrompt?: string) {
     setBusy("send");
     try {
       const data = await api<{ issue: GithubIssueLink }>("/api/admin/tickets/github", {
         method: "POST",
-        json: { ticketId: ticket.id, prompt, repo },
+        json: { ticketId: ticket.id, prompt: customPrompt ?? promptFor(repo), repo },
       });
       // El servidor pasa el ticket a «En desarrollo» si estaba antes en el flujo.
       const moves = ["new", "analysis", "ready"].includes(ticket.status);
       onUpdated({ github_issue: data.issue, ...(moves ? { status: "in_progress" as const, status_since: new Date().toISOString() } : {}) });
       setSendOpen(false);
-      notifyOk(`Issue creado: ${data.issue.repo}#${data.issue.number}. Claude arranca en unos segundos.`);
+      notifyOk(`Claude arrancó en ${data.issue.repo}#${data.issue.number}. Si tiene preguntas, aparecen acá.`);
     } catch (err) {
       notifyError(err);
     } finally {
@@ -105,12 +131,12 @@ export function GithubSection({
     }
   }
 
-  async function createPull(branch: string) {
+  async function createPull(repoName: string, branch: string) {
     setBusy(branch);
     try {
       const data = await api<{ pull: { url: string; number: number } }>("/api/admin/tickets/github", {
         method: "PUT",
-        json: { ticketId: ticket.id, branch },
+        json: { ticketId: ticket.id, repo: repoName, branch },
       });
       notifyOk(`PR #${data.pull.number} creado`);
       void refresh();
@@ -131,8 +157,9 @@ export function GithubSection({
           </Text>
         </Group>
         <Text size="xs" c="dimmed" mb="sm">
-          Crea un issue en el repo del cliente con el prompt del ticket. Claude Code lo trabaja ahí con tu suscripción: si
-          tiene dudas, las deja como preguntas (aparecen arriba para responder); si no, pushea una rama y desde acá creás el PR.
+          Claude lo trabaja en GitHub con tu plan{repos.length > 1 ? `, mirando los ${repos.length} repos del cliente (back y front)` : ""}.
+          Si tiene dudas, las devuelve acá antes de tocar código; si no, arma el plan, implementa cada parte en su repo y desde
+          acá creás los PR.
         </Text>
         {repos.length === 0 ? (
           <Text size="xs" c="yellow.8">
@@ -141,10 +168,26 @@ export function GithubSection({
         ) : (
           <Group gap="xs">
             {repos.length > 1 && (
-              <Select size="xs" data={repos} value={repo} onChange={setRepo} allowDeselect={false} w={240} />
+              <Select
+                size="xs"
+                data={repos.map((r) => ({ value: r, label: `Principal: ${r}` }))}
+                value={repo}
+                onChange={setRepo}
+                allowDeselect={false}
+                w={280}
+              />
             )}
-            <Button size="xs" leftSection={<IconBrandGithub size={14} />} onClick={openSend} disabled={!mine}>
-              Mandar a GitHub{repos.length === 1 ? ` (${repos[0]})` : ""}
+            <Button
+              size="xs"
+              leftSection={<IconSparkles size={14} />}
+              onClick={() => send()}
+              loading={busy === "send"}
+              disabled={!mine}
+            >
+              Resolver con Claude
+            </Button>
+            <Button size="xs" variant="subtle" leftSection={<IconPencil size={14} />} onClick={openSend} disabled={!mine}>
+              Editar el prompt antes
             </Button>
           </Group>
         )}
@@ -167,8 +210,8 @@ export function GithubSection({
               <Button variant="default" onClick={() => setSendOpen(false)}>
                 Cancelar
               </Button>
-              <Button leftSection={<IconBrandGithub size={16} />} onClick={send} loading={busy === "send"}>
-                Crear issue
+              <Button leftSection={<IconSparkles size={16} />} onClick={() => send(prompt)} loading={busy === "send"}>
+                Resolver con Claude
               </Button>
             </Group>
           </Stack>
@@ -205,17 +248,75 @@ export function GithubSection({
         </Alert>
       )}
 
+      {status?.dispatchError && (
+        <Alert color="yellow" variant="light" mb="xs">
+          <Text size="xs">No se pudieron abrir todos los issues de los otros repos: {status.dispatchError}. Se reintenta solo.</Text>
+        </Alert>
+      )}
+
       {status && (
         <Stack gap="sm">
+          {status.plan ? (
+            <Paper p="xs" bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))">
+              <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+                Plan del agente
+              </Text>
+              <Text size="sm" mb={6}>
+                {status.plan.summary}
+              </Text>
+              <Stack gap={4}>
+                {status.plan.repos.map((part) => {
+                  const task = status.tasks.find((t) => t.repo === part.repo);
+                  return (
+                    <div key={part.repo}>
+                      <Group gap={6}>
+                        <Text size="xs" fw={600} ff="monospace">
+                          {part.repo}
+                        </Text>
+                        {part.repo === status.issue.repo ? (
+                          <Badge size="xs" variant="light">
+                            Principal
+                          </Badge>
+                        ) : task ? (
+                          <Anchor href={task.url} target="_blank" rel="noreferrer" size="xs">
+                            #{task.number}
+                          </Anchor>
+                        ) : (
+                          <Badge size="xs" variant="light" color="gray">
+                            Por repartir
+                          </Badge>
+                        )}
+                      </Group>
+                      <Text size="xs" c="dimmed">
+                        {part.tasks.join(" · ")}
+                      </Text>
+                    </div>
+                  );
+                })}
+              </Stack>
+              {status.plan.contract && (
+                <Text size="xs" mt={6} style={{ whiteSpace: "pre-wrap" }}>
+                  <b>Contrato:</b> {status.plan.contract}
+                </Text>
+              )}
+            </Paper>
+          ) : (
+            !status.triage?.questions.length && (
+              <Text size="xs" c="dimmed">
+                Claude está analizando el ticket. Las preguntas o el plan aparecen acá solos.
+              </Text>
+            )
+          )}
+
           {status.branches.length === 0 ? (
             <Text size="xs" c="dimmed">
-              Claude todavía no pusheó ninguna rama.
+              Todavía no hay ramas con cambios.
             </Text>
           ) : (
             status.branches.map((branch) => (
-              <Group key={branch.name} justify="space-between" gap="xs" wrap="nowrap">
+              <Group key={`${branch.repo}:${branch.name}`} justify="space-between" gap="xs" wrap="nowrap">
                 <Anchor href={branch.url} target="_blank" rel="noreferrer" size="xs" ff="monospace" truncate>
-                  {branch.name}
+                  {branch.repo.split("/")[1]} · {branch.name}
                 </Anchor>
                 {branch.pull ? (
                   <Group gap={6} wrap="nowrap">
@@ -230,7 +331,7 @@ export function GithubSection({
                   <Button
                     size="compact-xs"
                     leftSection={<IconGitPullRequest size={12} />}
-                    onClick={() => createPull(branch.name)}
+                    onClick={() => createPull(branch.repo, branch.name)}
                     loading={busy === branch.name}
                     disabled={!mine}
                   >
@@ -244,13 +345,19 @@ export function GithubSection({
           {status.comments.length > 0 && (
             <Stack gap={6}>
               <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-                Últimos comentarios del issue
+                Últimos comentarios
               </Text>
               {status.comments.map((comment) => (
                 <Paper key={comment.id} p="xs" bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))">
                   <Group justify="space-between" mb={2}>
                     <Text size="xs" fw={600}>
                       {comment.bot ? "Claude" : comment.user}
+                      {status.tasks.length > 0 && (
+                        <Text span size="xs" c="dimmed" fw={400}>
+                          {" "}
+                          · {comment.repo.split("/")[1]}
+                        </Text>
+                      )}
                     </Text>
                     <Anchor href={comment.url} target="_blank" rel="noreferrer" size="xs" c="dimmed">
                       {relative(comment.createdAt)}

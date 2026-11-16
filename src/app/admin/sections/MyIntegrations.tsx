@@ -43,9 +43,31 @@ const INFO: Record<Kind, { title: string; icon: typeof IconSparkles; help: React
   },
 };
 
+type RepoResult = { repo: string; ok: boolean; error: string | null };
+
 function IntegrationCard({ kind, status, onChange }: { kind: Kind; status: Status; onChange: (s: Status) => void }) {
   const [secret, setSecret] = useState("");
   const [busy, setBusy] = useState(false);
+  const [repoResults, setRepoResults] = useState<RepoResult[] | null>(null);
+
+  // Carga el token como secreto MAGON_GH_TOKEN en los repos de clientes de tu cuenta: el workflow lo usa
+  // para leer los otros repos del cliente (back y front) cuando un ticket toca más de uno.
+  async function prepareRepos() {
+    setBusy(true);
+    try {
+      const data = await api<{ results: RepoResult[] }>("/api/admin/me/integrations", {
+        method: "POST",
+        json: { action: "repo-secrets" },
+      });
+      setRepoResults(data.results);
+      const ok = data.results.filter((r) => r.ok).length;
+      notifyOk(`Listo en ${ok} de ${data.results.length} repos`);
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setBusy(false);
+    }
+  }
   const info = INFO[kind];
   const connected = kind === "github" ? status.github.connected : status.anthropic.connected;
 
@@ -119,6 +141,25 @@ function IntegrationCard({ kind, status, onChange }: { kind: Kind; status: Statu
           </Button>
         )}
       </Group>
+      {kind === "github" && connected && (
+        <Stack gap={4} mt="sm">
+          <Group justify="space-between" gap="xs">
+            <Text size="xs" c="dimmed" style={{ flex: 1 }}>
+              Para tickets que tocan back y front: deja que el agente lea los otros repos del cliente. Se hace una vez
+              (y de nuevo si cambiás el token o se suma un repo).
+            </Text>
+            <Button size="xs" variant="light" onClick={prepareRepos} loading={busy}>
+              Preparar mis repos
+            </Button>
+          </Group>
+          {repoResults?.map((r) => (
+            <Text key={r.repo} size="xs" c={r.ok ? "teal" : "red"}>
+              {r.ok ? "✓" : "✗"} {r.repo}
+              {r.error ? ` — ${r.error}` : ""}
+            </Text>
+          ))}
+        </Stack>
+      )}
     </Paper>
   );
 }

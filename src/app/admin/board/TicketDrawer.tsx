@@ -46,6 +46,7 @@ import {
   IconRobot,
   IconTag,
   IconUser,
+  IconClockHour4,
 } from "@tabler/icons-react";
 import { api, notifyError } from "../lib/api";
 import { dateTime, initials, relative } from "../lib/format";
@@ -66,6 +67,7 @@ import {
 import type { TicketChanges } from "./Board";
 import { buildTicketPrompt } from "./prompt";
 import { AgentPanel } from "./AgentPanel";
+import { TicketTime } from "../sections/TimeWidgets";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -530,6 +532,9 @@ export function TicketDrawer({
           <Tabs.Tab value="agente" leftSection={<IconRobot size={14} />}>
             Agente
           </Tabs.Tab>
+          <Tabs.Tab value="horas" leftSection={<IconClockHour4 size={14} />}>
+            Horas
+          </Tabs.Tab>
           <Tabs.Tab value="actividad" rightSection={comments ? <Badge size="xs" circle>{comments}</Badge> : null}>
             Actividad
           </Tabs.Tab>
@@ -615,6 +620,10 @@ export function TicketDrawer({
               void loadActivity();
             }}
           />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="horas" p="md">
+          {tab === "horas" && <TicketTime ticket={ticket} me={me} />}
         </Tabs.Panel>
 
         <Tabs.Panel value="actividad" p="md">

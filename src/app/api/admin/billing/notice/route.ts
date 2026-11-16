@@ -1,13 +1,14 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { allNotices, clientNotice, defaultPeriod, isPeriod, NoticeError } from "@/lib/billing/notices";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
 // GET ?clientId=…&period=YYYY-MM → aviso de un cliente. GET ?all=1&period=… → todos en un PDF.
 export async function GET(request: NextRequest) {
-  if (!getAdminSession(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
   const params = request.nextUrl.searchParams;
   const period = isPeriod(params.get("period")) ? (params.get("period") as string) : defaultPeriod();
   try {

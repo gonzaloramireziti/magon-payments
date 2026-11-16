@@ -69,6 +69,7 @@ export function Markdown({ content }: { content: string }) {
 export function DocsSection({ me }: { me: Me }) {
   const [tab, setTab] = useState<string | null>("paginas");
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const canVault = me.permissions.includes("vault");
 
   useEffect(() => {
     api<{ clients: Array<{ id: string; name: string }> }>("/api/admin/clients")
@@ -89,16 +90,20 @@ export function DocsSection({ me }: { me: Me }) {
           <Tabs.Tab value="paginas" leftSection={<IconBook size={16} />}>
             Páginas
           </Tabs.Tab>
-          <Tabs.Tab value="credenciales" leftSection={<IconKey size={16} />}>
-            Credenciales
-          </Tabs.Tab>
+          {canVault && (
+            <Tabs.Tab value="credenciales" leftSection={<IconKey size={16} />}>
+              Credenciales
+            </Tabs.Tab>
+          )}
         </Tabs.List>
         <Tabs.Panel value="paginas" pt="md">
           <Pages clients={clients} />
         </Tabs.Panel>
-        <Tabs.Panel value="credenciales" pt="md">
-          <Vault me={me} clients={clients} />
-        </Tabs.Panel>
+        {canVault && (
+          <Tabs.Panel value="credenciales" pt="md">
+            <Vault me={me} clients={clients} />
+          </Tabs.Panel>
+        )}
       </Tabs>
     </Stack>
   );

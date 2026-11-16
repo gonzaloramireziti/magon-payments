@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { IntegrationError } from "@/lib/integrations/service";
 import { GithubError } from "@/lib/github/api";
 import { createPull, sendToGithub, syncGithub } from "@/lib/github/service";
 import { TicketError } from "@/lib/tickets/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,8 @@ async function readJson(request: NextRequest): Promise<Record<string, unknown>> 
 
 // Estado del issue: comentarios, ramas y PRs. Pasa al ticket las preguntas nuevas de Claude.
 export async function GET(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "agent");
+  if (session instanceof Response) return session;
   const ticketId = request.nextUrl.searchParams.get("ticketId") ?? "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");
   try {
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
 
 // Manda el ticket como issue al repo del cliente. Body: { ticketId, prompt, repo? }
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "agent");
+  if (session instanceof Response) return session;
   const body = await readJson(request);
   const ticketId = typeof body.ticketId === "string" ? body.ticketId : "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");
@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
 
 // Crea el PR desde una rama del agente. Body: { ticketId, repo, branch }
 export async function PUT(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "agent");
+  if (session instanceof Response) return session;
   const body = await readJson(request);
   const ticketId = typeof body.ticketId === "string" ? body.ticketId : "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");

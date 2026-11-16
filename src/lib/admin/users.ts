@@ -7,11 +7,13 @@ import {
   passwordProblem,
   verifyPassword,
 } from "@/lib/admin/passwords";
+import { isRole, type Role } from "@/lib/admin/roles";
 
 export type AdminUser = {
   id: string;
   name: string;
   email: string;
+  role: Role;
   active: boolean;
   pending: boolean;
   lastLoginAt: string | null;
@@ -23,6 +25,8 @@ type AdminUserRow = {
   name: string;
   email: string;
   password_hash: string | null;
+  // Migración 012; sin ella falta y se toma como admin.
+  role?: string | null;
   active: boolean;
   invite_token_hash: string | null;
   invite_expires_at: string | null;
@@ -45,6 +49,7 @@ function toUser(row: AdminUserRow): AdminUser {
     id: row.id,
     name: row.name,
     email: row.email,
+    role: isRole(row.role) ? row.role : "admin",
     active: row.active,
     pending: !row.password_hash,
     lastLoginAt: row.last_login_at,
@@ -98,19 +103,21 @@ async function issueInvite(id: string): Promise<{ token: string; expiresAt: stri
   return { token, expiresAt };
 }
 
-export async function createUser(nameRaw: unknown, emailRaw: unknown) {
+export async function createUser(nameRaw: unknown, emailRaw: unknown, roleRaw: unknown = undefined) {
   const name = typeof nameRaw === "string" ? nameRaw.trim() : "";
   const email = normalizeEmail(emailRaw);
   if (!name) throw new UserError("MISSING_NAME", 400, "Falta el nombre");
   if (!email.includes("@")) throw new UserError("INVALID_EMAIL", 400, "El email no es válido");
+  if (roleRaw !== undefined && !isRole(roleRaw)) throw new UserError("INVALID_ROLE", 400, "Rol inválido");
 
   const { data, error } = await getSupabaseAdmin()
     .from("admin_users")
-    .insert({ name, email })
+    .insert(roleRaw === undefined ? { name, email } : { name, email, role: roleRaw })
     .select("*")
     .single();
   if (error) {
     if (error.code === "23505") throw new UserError("DUPLICATE_EMAIL", 409, "Ya existe un usuario con ese email");
+    if (error.code === "PGRST204") throw new UserError("ROLES_UNAVAILABLE", 503, "Falta correr la migración 012");
     throw error;
   }
   const invite = await issueInvite(data.id as string);
@@ -133,6 +140,38 @@ export async function setUserActive(id: string, active: boolean, actingUserId: s
     .select("*")
     .single();
   if (error) throw error;
+  return toUser(data as AdminUserRow);
+}
+
+// Cambia el rol. Siempre tiene que quedar al menos un administrador activo, y nadie se baja
+// el rol a sí mismo (lo tiene que hacer otro admin).
+export async function setUserRole(id: string, roleRaw: unknown, actingUserId: string | null) {
+  if (!isRole(roleRaw)) throw new UserError("INVALID_ROLE", 400, "Rol inválido");
+  if (id === actingUserId && roleRaw !== "admin") {
+    throw new UserError("SELF_DEMOTE", 400, "No podés sacarte el rol de administrador: pedíselo a otro admin");
+  }
+  const supabase = getSupabaseAdmin();
+  if (roleRaw !== "admin") {
+    const { data: admins, error: adminsError } = await supabase
+      .from("admin_users")
+      .select("id")
+      .eq("role", "admin")
+      .eq("active", true);
+    if (adminsError) {
+      if (adminsError.code === "42703") throw new UserError("ROLES_UNAVAILABLE", 503, "Falta correr la migración 012");
+      throw adminsError;
+    }
+    if (!(admins ?? []).some((a) => a.id !== id)) {
+      throw new UserError("LAST_ADMIN", 400, "Tiene que quedar al menos un administrador activo");
+    }
+  }
+  const { data, error } = await supabase.from("admin_users").update({ role: roleRaw }).eq("id", id).select("*").single();
+  if (error) {
+    if (error.code === "42703" || error.code === "PGRST204") {
+      throw new UserError("ROLES_UNAVAILABLE", 503, "Falta correr la migración 012");
+    }
+    throw error;
+  }
   return toUser(data as AdminUserRow);
 }
 

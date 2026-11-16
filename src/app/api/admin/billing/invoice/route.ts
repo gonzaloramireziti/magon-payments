@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { defaultPeriod, isPeriod, NoticeError } from "@/lib/billing/notices";
 import { allInvoices, clientInvoice } from "@/lib/billing/invoices";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 // GET ?clientId=…&period=YYYY-MM → factura de un cliente. GET ?all=1&period=… → todas en un PDF.
 // Sin period usa el último período facturado (el mes anterior). ?inline=1 la abre en el navegador.
 export async function GET(request: NextRequest) {
-  if (!getAdminSession(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
   const params = request.nextUrl.searchParams;
   const period = isPeriod(params.get("period")) ? (params.get("period") as string) : defaultPeriod();
   try {

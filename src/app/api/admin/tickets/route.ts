@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession, isAdminRequest } from "@/lib/admin/auth";
 import {
   createManualTicket,
   isMissingTable,
@@ -8,6 +7,7 @@ import {
   TicketError,
   updateTicket,
 } from "@/lib/tickets/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,8 @@ function handleError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request);
+  if (guard instanceof Response) return guard;
   const params = new URL(request.url).searchParams;
   const includeDiscarded = params.get("discarded") === "1";
   try {
@@ -50,8 +51,8 @@ async function readBody(request: NextRequest): Promise<{ fields: Record<string, 
 }
 
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request);
+  if (session instanceof Response) return session;
   let body: { fields: Record<string, unknown>; files: File[] };
   try {
     body = await readBody(request);
@@ -66,8 +67,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request);
+  if (session instanceof Response) return session;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;

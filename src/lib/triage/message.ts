@@ -115,6 +115,23 @@ export function buildManualTriagePrompt(input: TriageInput): string {
 type ParsedTriage = { verdict: "direct" | "needs_decision"; summary: string; questions: TriageQuestion[] };
 const KINDS = ["negocio", "tecnica", "cliente"];
 
+/**
+ * Todos los objetos JSON de los bloques de código del texto, en orden. La Action de GitHub borra los
+ * comentarios HTML del texto de Claude, así que el plan y las preguntas se reconocen por su forma.
+ */
+export function jsonBlocks(text: string): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const match of text.matchAll(/```[a-zA-Z-]*\s*\n([\s\S]*?)```/g)) {
+    try {
+      const value = JSON.parse(match[1]);
+      if (value && typeof value === "object" && !Array.isArray(value)) out.push(value as Record<string, unknown>);
+    } catch {
+      /* no es JSON */
+    }
+  }
+  return out;
+}
+
 export function extractJson(text: string): unknown {
   const candidates: string[] = [];
   for (const match of text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)) candidates.push(match[1]);

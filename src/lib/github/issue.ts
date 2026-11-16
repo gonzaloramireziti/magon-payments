@@ -1,5 +1,5 @@
 // Textos y parseo del issue de GitHub donde trabaja Claude Code. Sin dependencias: se prueba suelto.
-import { extractJson, parseTriageReply, PLAN_MARKER, QUESTIONS_MARKER, type Decision, type TriageQuestion } from "../triage/message";
+import { jsonBlocks, parseTriageReply, type Decision, type TriageQuestion } from "../triage/message";
 
 export type GithubIssueLink = {
   repo: string;
@@ -83,8 +83,11 @@ export function latestQuestions(
 } | null {
   // El más nuevo primero (los ids de GitHub son crecientes), sin importar de qué issue sea.
   for (const comment of [...comments].sort((a, b) => b.id - a.id)) {
-    if (!isBot(comment.user) || !comment.body.includes(QUESTIONS_MARKER)) continue;
-    const parsed = parseTriageReply(comment.body.slice(comment.body.indexOf(QUESTIONS_MARKER)), `g${comment.id}-`);
+    if (!isBot(comment.user)) continue;
+    // El bloque de preguntas es el que trae "verdict" (la marca HTML la borra la Action).
+    const block = jsonBlocks(comment.body).reverse().find((b) => "verdict" in b && Array.isArray(b.questions));
+    if (!block) continue;
+    const parsed = parseTriageReply("```json\n" + JSON.stringify(block) + "\n```", `g${comment.id}-`);
     if (parsed.ok && parsed.value.questions.length) return { commentId: comment.id, source: comment.source, ...parsed.value };
   }
   return null;
@@ -110,10 +113,9 @@ export function reposMarker(others: string[]): string {
 
 /** Valida el plan que publicó el agente: solo repos del cliente y tareas concretas. */
 export function parsePlan(text: string, clientRepos: string[]): Omit<TicketPlan, "commentId"> | null {
-  const at = text.indexOf(PLAN_MARKER);
-  if (at === -1) return null;
-  const data = extractJson(text.slice(at)) as Record<string, unknown> | null;
-  if (!data || typeof data !== "object" || !Array.isArray(data.repos)) return null;
+  // El bloque del plan es el que trae "repos" (la marca HTML la borra la Action).
+  const data = jsonBlocks(text).reverse().find((b) => Array.isArray(b.repos));
+  if (!data) return null;
   const allowed = new Map(clientRepos.map((entry) => [repoKey(entry), entry.split("@")[0]]));
   const repos: PlanRepo[] = [];
   for (const raw of data.repos as Array<Record<string, unknown>>) {
@@ -134,7 +136,7 @@ export function parsePlan(text: string, clientRepos: string[]): Omit<TicketPlan,
 /** El último plan que publicó un bot en los comentarios. */
 export function latestPlan(comments: IssueComment[], isBot: (user: string) => boolean, clientRepos: string[]): TicketPlan | null {
   for (const comment of [...comments].reverse()) {
-    if (!isBot(comment.user) || !comment.body.includes(PLAN_MARKER)) continue;
+    if (!isBot(comment.user)) continue;
     const plan = parsePlan(comment.body, clientRepos);
     if (plan) return { commentId: comment.id, ...plan };
   }
@@ -164,7 +166,6 @@ export function taskIssueBody(input: {
   planUrl: string;
   decisions: Decision[];
   questionsFormat: string;
-  questionsMarker: string;
 }): string {
   const { ticket, plan, repo } = input;
   const mine = plan.repos.find((r) => r.repo === repo);
@@ -195,7 +196,7 @@ export function taskIssueBody(input: {
     "",
     "1. Leé el `CLAUDE.md` del repo y respetá su stack y sus convenciones.",
     "2. Seguí el plan y el contrato al pie de la letra: los otros repos cuentan con eso.",
-    `3. Si algo del plan no se puede hacer así, o aparece una decisión nueva, no la inventes: terminá tu comentario con una línea \`<!-- ${input.questionsMarker} -->\` y el bloque JSON de abajo, y esperá.`,
+    "3. Si algo del plan no se puede hacer así, o aparece una decisión nueva, no la inventes: terminá tu comentario con el bloque ```json de preguntas (formato de abajo) y esperá.",
     "4. Corré el build, el lint y los tests que tenga el repo. Si algo falla, mostrá la salida real.",
     "5. Pusheá la rama con los cambios. No abras el PR ni mergees.",
     "",

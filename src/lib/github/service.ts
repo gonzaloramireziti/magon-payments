@@ -5,7 +5,7 @@ import { githubTokenFor } from "@/lib/integrations/service";
 import { splitRepo } from "@/lib/integrations/repos";
 import { updateTicket } from "@/lib/tickets/service";
 import { storeTriage } from "@/lib/triage/service";
-import { QUESTIONS_MARKER, TRIAGE_REPLY_FORMAT, type Decision, type TriageResult } from "@/lib/triage/message";
+import { TRIAGE_REPLY_FORMAT, type Decision, type TriageResult } from "@/lib/triage/message";
 import { github, GithubError } from "@/lib/github/api";
 import {
   answersComment,
@@ -235,7 +235,6 @@ async function dispatchTasks(
           planUrl: link.url,
           decisions: ticket.decisions ?? [],
           questionsFormat: TRIAGE_REPLY_FORMAT,
-          questionsMarker: QUESTIONS_MARKER,
         }),
       },
     });

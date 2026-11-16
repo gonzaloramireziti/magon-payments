@@ -1,6 +1,6 @@
 // Arma el prompt para resolver un ticket con un agente (Claude Code). Función pura: se prueba sola.
 import { STATUS_LABEL, URGENCY, type Activity, type Ticket } from "../lib/tickets";
-import { PLAN_MARKER, PLAN_REPLY_FORMAT, QUESTIONS_MARKER, TRIAGE_REPLY_FORMAT } from "../../../lib/triage/message";
+import { PLAN_REPLY_FORMAT, TRIAGE_REPLY_FORMAT } from "../../../lib/triage/message";
 
 export type PromptOptions = {
   // Contexto técnico del cliente (proyecto, carpeta, stack, agente), cargado en Clientes.
@@ -121,10 +121,10 @@ export function buildTicketPrompt(ticket: Ticket, options: PromptOptions): strin
       `2. Analizá el ticket${others.length ? " mirando todos los repos que hagan falta (por ejemplo back y front)" : ""}. Fijate si queda alguna decisión de negocio o técnica sin resolver (las resueltas están en «Decisiones tomadas»), o si falta información que solo tiene el cliente.`
     );
     push(
-      `   Si es así, **no cambies código**: terminá tu comentario con una línea \`<!-- ${QUESTIONS_MARKER} -->\` seguida del bloque JSON de preguntas, y esperá. El equipo te va a responder en este issue.`
+      "   Si es así, **no cambies código**: terminá tu comentario con el bloque ```json de preguntas (formato de abajo) y esperá. El equipo te va a responder en este issue."
     );
     push(
-      `3. Si no hay dudas, publicá en tu comentario el plan: una línea \`<!-- ${PLAN_MARKER} -->\` seguida del bloque JSON del plan, con lo que hay que hacer en cada repo${others.length ? " y el contrato entre ellos (endpoints, campos, tipos)" : ""}.`
+      `3. Si no hay dudas, publicá en tu comentario el plan en un bloque \`\`\`json (formato de abajo), con lo que hay que hacer en cada repo${others.length ? " y el contrato entre ellos (endpoints, campos, tipos)" : ""}.`
     );
     push(
       bug

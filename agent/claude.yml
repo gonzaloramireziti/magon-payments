@@ -1,6 +1,6 @@
 # Workflow de Claude Code para los repos de los clientes.
 # Copialo a .github/workflows/claude.yml en cada repo que se carga en el panel (Clientes → Repositorios).
-# Ver AGENTE.md en el repo de magon-payments.
+# Guía: AGENTE.md en el repo de magon-payments.
 name: Claude
 
 on:
@@ -30,18 +30,61 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Rama base del ticket: el panel la marca en el issue cuando el cliente trabaja sobre una
-      # rama propia (ej. una rama por cliente). El cuerpo entra por env, nunca interpolado en el script.
-      - id: base
+      # Marcas que deja el panel en el issue: la rama base del cliente y los otros repos del cliente.
+      # El cuerpo entra por env, nunca interpolado en el script.
+      - id: markers
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          branch=$(printf '%s' "$ISSUE_BODY" | grep -oE 'magon:base=[A-Za-z0-9._/-]+' | head -n1 | cut -d= -f2 || true)
-          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          base=$(printf '%s' "$ISSUE_BODY" | grep -oE 'magon:base=[A-Za-z0-9._/-]+' | head -n1 | cut -d= -f2 || true)
+          repos=$(printf '%s' "$ISSUE_BODY" | grep -oE 'magon:repos=[A-Za-z0-9._/@,-]+' | head -n1 | cut -d= -f2 || true)
+          echo "branch=$base" >> "$GITHUB_OUTPUT"
+          echo "repos=$repos" >> "$GITHUB_OUTPUT"
+
+      # Los otros repos del cliente (back / front), en modo lectura para que el agente arme el plan.
+      # El token solo lo ve este paso: se saca de la URL del remoto y Claude nunca lo recibe.
+      - name: Repos relacionados (solo lectura)
+        if: steps.markers.outputs.repos != ''
+        env:
+          REPOS: ${{ steps.markers.outputs.repos }}
+          READ_TOKEN: ${{ secrets.MAGON_GH_TOKEN }}
+        run: |
+          mkdir -p _repos
+          echo "_repos/" >> .git/info/exclude
+          if [ -z "$READ_TOKEN" ]; then
+            echo "::warning::Falta el secreto MAGON_GH_TOKEN (panel → Mis integraciones → Preparar mis repos): el agente no puede leer los otros repos."
+            exit 0
+          fi
+          for entry in ${REPOS//,/ }; do
+            [[ "$entry" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+(@[A-Za-z0-9._/-]+)?$ ]] || continue
+            repo=${entry%@*}; base=""; [[ "$entry" == *@* ]] && base=${entry#*@}
+            dir="_repos/${repo#*/}"
+            if git clone --quiet --depth 1 ${base:+--branch "$base"} "https://x-access-token:${READ_TOKEN}@github.com/${repo}.git" "$dir"; then
+              git -C "$dir" remote set-url origin "https://github.com/${repo}.git"
+            else
+              echo "::warning::No se pudo clonar $repo"
+            fi
+          done
+
+      - if: hashFiles('**/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - if: hashFiles('**/*.csproj') != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
       - uses: anthropics/claude-code-action@v1
         with:
-          base_branch: ${{ steps.base.outputs.branch }}
+          base_branch: ${{ steps.markers.outputs.branch }}
           # Cada uno paga con su suscripción: se usa el secreto CLAUDE_TOKEN_<usuario de GitHub de quien lo dispara>
           # y, si no existe, el general CLAUDE_CODE_OAUTH_TOKEN. Los tokens se generan con `claude setup-token`.
           claude_code_oauth_token: ${{ secrets[format('CLAUDE_TOKEN_{0}', github.actor)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Para que pueda instalar, compilar y correr los tests del repo.
+          claude_args: |
+            --allowedTools "Bash(npm:*),Bash(npx:*),Bash(dotnet:*),Bash(git:*)"

@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { vaultKeyRaw } from "@/lib/env";
 import { decryptSecret, encryptSecret, parseKey, VaultKeyError } from "@/lib/vault/crypto";
+import { READ_SECRET, setRepoSecret } from "@/lib/github/secrets";
 
 /**
  * Integraciones de cada usuario del panel: su token de GitHub y su API key de Anthropic.
@@ -126,4 +127,39 @@ export async function githubTokenFor(userId: string): Promise<string> {
   const token = await readSecret(userId, "github_token_enc");
   if (!token) throw new IntegrationError("GITHUB_NOT_CONNECTED", 400, "Conectá tu GitHub en «Mis integraciones»");
   return token;
+}
+
+/**
+ * Prepara los repos del usuario para el agente: carga su token de GitHub como secreto MAGON_GH_TOKEN
+ * en los repos de clientes que son de su cuenta. El workflow lo usa solo para clonar, en modo lectura,
+ * los otros repos del cliente (back y front) cuando un ticket toca más de uno. Claude no lo ve.
+ */
+export async function configureRepoSecrets(userId: string): Promise<Array<{ repo: string; ok: boolean; error: string | null }>> {
+  const { data, error } = await getSupabaseAdmin().from("admin_users").select("github_login").eq("id", userId).maybeSingle();
+  if (error) throw error;
+  const login = (data?.github_login as string | null) ?? null;
+  const token = await githubTokenFor(userId);
+  if (!login) throw new IntegrationError("GITHUB_NOT_CONNECTED", 400, "Conectá tu GitHub en «Mis integraciones»");
+
+  const { data: clients, error: clientsError } = await getSupabaseAdmin().from("clients").select("repos").eq("active", true);
+  if (clientsError) throw clientsError;
+  const mine = Array.from(
+    new Set(
+      (clients ?? [])
+        .flatMap((c) => ((c.repos as string[] | null) ?? []).map((entry) => entry.split("@")[0]))
+        .filter((repo) => repo.split("/")[0].toLowerCase() === login.toLowerCase())
+    )
+  ).sort();
+  if (!mine.length) throw new IntegrationError("NO_REPOS", 400, `No hay repos de clientes de la cuenta ${login}`);
+
+  const results: Array<{ repo: string; ok: boolean; error: string | null }> = [];
+  for (const repo of mine) {
+    try {
+      await setRepoSecret(token, repo, READ_SECRET, token);
+      results.push({ repo, ok: true, error: null });
+    } catch (err) {
+      results.push({ repo, ok: false, error: err instanceof Error ? err.message : "error" });
+    }
+  }
+  return results;
 }

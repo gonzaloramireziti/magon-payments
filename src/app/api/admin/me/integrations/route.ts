@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getAdminSession } from "@/lib/admin/auth";
 import {
+  configureRepoSecrets,
   getIntegrationStatus,
   IntegrationError,
   removeIntegration,
@@ -59,6 +60,19 @@ export async function DELETE(request: NextRequest) {
   try {
     await removeIntegration(userId, kind);
     return okJson({ integrations: await getIntegrationStatus(userId) });
+  } catch (err) {
+    return handleError(err);
+  }
+}
+
+// Prepara los repos del usuario para el agente (secreto MAGON_GH_TOKEN). Body: { action: "repo-secrets" }
+export async function POST(request: NextRequest) {
+  const { userId, error } = userSession(request);
+  if (!userId) return error;
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    if (body.action !== "repo-secrets") return errorJson("Acción desconocida", 400, "BAD_ACTION");
+    return okJson({ results: await configureRepoSecrets(userId) });
   } catch (err) {
     return handleError(err);
   }

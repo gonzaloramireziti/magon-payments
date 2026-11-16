@@ -8,6 +8,8 @@ export type TriageResult = {
   analyzedAt: string;
   analyzedBy: string;
   model: string;
+  // Si las preguntas vinieron de un issue de GitHub: a cuál se mandan las respuestas.
+  source?: { repo: string; number: number } | null;
 };
 export type Decision = { questionId: string | null; question: string; answer: string; by: string; at: string };
 
@@ -113,7 +115,7 @@ export function buildManualTriagePrompt(input: TriageInput): string {
 type ParsedTriage = { verdict: "direct" | "needs_decision"; summary: string; questions: TriageQuestion[] };
 const KINDS = ["negocio", "tecnica", "cliente"];
 
-function extractJson(text: string): unknown {
+export function extractJson(text: string): unknown {
   const candidates: string[] = [];
   for (const match of text.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)) candidates.push(match[1]);
   const first = text.indexOf("{");
@@ -159,3 +161,21 @@ export function parseTriageReply(text: string, idPrefix = "q"): { ok: true; valu
     value: { verdict: questions.length ? data.verdict : "direct", summary: summary.slice(0, 600), questions },
   };
 }
+
+// --- Plan para tickets que tocan más de un repo (lo publica el agente de GitHub en el issue).
+
+export const PLAN_MARKER = "magon:plan";
+
+export const PLAN_REPLY_FORMAT = `Publicá el plan con un único bloque de código JSON con esta forma:
+
+\`\`\`json
+{
+  "summary": "qué se va a hacer, en una o dos oraciones",
+  "contract": "lo que tienen que respetar los repos entre sí: endpoints, rutas, campos y tipos (vacío si toca un solo repo)",
+  "repos": [
+    { "repo": "owner/nombre", "tasks": ["tarea concreta 1", "tarea concreta 2"] }
+  ]
+}
+\`\`\`
+
+En "repos" van solo los que hay que cambiar, con el nombre exacto de la lista.`;

@@ -204,27 +204,30 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    «Es una pregunta» el ticket pasa a *Esperando al cliente*; cuando responde, vuelve a *En análisis*
    y le avisa al responsable. Si se descartó por falta de información, el cliente también puede
    responder y el ticket se reabre. Las notas internas siguen sin verse.
-7. **Infraestructura** (admins): dominios, hosting, SSL y licencias de cada cliente con su vencimiento,
+8. **Infraestructura** (admins): dominios, hosting, SSL y licencias de cada cliente con su vencimiento,
    proveedor y costo; avisa a los administradores 30, 7 y 1 día antes y el mismo día (cron
    `/api/cron/daily`). En *Monitoreo* se carga la URL de cada sistema: con 2 fallas seguidas se marca
    caído, se abre un ticket crítico y se avisa; cuando vuelve, avisa y lo comenta en el ticket.
-7. **Proyectos:** desarrollos grandes de un cliente con alcance, responsable, fecha de entrega, horas
+9. **Proyectos:** desarrollos grandes de un cliente con alcance, responsable, fecha de entrega, horas
    estimadas, presupuesto (solo lo ven los admins) y etapas que se tildan. Cada ticket se puede asociar
    a un proyecto desde su detalle: el avance y las horas del proyecto salen de sus tickets.
-8. **Ventas** (admins): prospectos por etapa (nuevo → contactado → propuesta → negociando), con
+10. **Ventas** (admins): prospectos por etapa (nuevo → contactado → propuesta → negociando), con
    presupuesto, abono mensual esperado y próximo paso con fecha. «Ganado: pasar a cliente» crea el
    cliente con su KEY y el abono, facturando desde el mes siguiente. Los seguimientos vencidos
    aparecen en Mi día.
-9. **Agenda:** reuniones, llamadas y recordatorios en Mi día; a la hora llega el aviso por WhatsApp,
+11. **Agenda:** reuniones, llamadas y recordatorios en Mi día; a la hora llega el aviso por WhatsApp,
    Discord o correo.
-7. **Mi día:** pantalla de inicio de cada usuario: sus tickets ordenados (para probar, en desarrollo,
+12. **Resumen mensual para el cliente:** en Clientes → menú → «Resumen mensual para el cliente»: qué se
+   resolvió, qué está en curso, horas dedicadas, avance de proyectos y caídas. Se edita, se copia para
+   WhatsApp o se manda por correo.
+13. **Mi día:** pantalla de inicio de cada usuario: sus tickets ordenados (para probar, en desarrollo,
    listos), las preguntas del agente que esperan respuesta, los tickets sin responsable (con botón para
    tomarlos), las horas de hoy y de la semana y, para los administradores, el estado de los cobros.
-8. **Horas:** cronómetro por ticket (▶ en Mi día o pestaña *Horas* del ticket; queda visible en la
+14. **Horas:** cronómetro por ticket (▶ en Mi día o pestaña *Horas* del ticket; queda visible en la
    cabecera mientras corre) o carga a mano (`1:30`, `2h`, `45m`). La sección *Horas* suma por cliente,
    por ticket y por persona, con filtros de período y exportación a CSV para Excel. Cada uno ve y corrige
    las suyas; los administradores ven las de todo el equipo.
-9. **Roles:** en *Usuarios* cada persona tiene un rol (se elige al invitarla y se cambia desde el menú):
+15. **Roles:** en *Usuarios* cada persona tiene un rol (se elige al invitarla y se cambia desde el menú):
 
    | Rol | Ve |
    | --- | --- |
@@ -236,7 +239,7 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    la plata, `/api/admin/clients` devuelve solo nombre, notas y repos. El rol se lee de la base en cada
    pedido, así que un cambio de rol o una baja rige al instante. Siempre queda al menos un administrador.
    El acceso de emergencia y la `ADMIN_API_KEY` son administradores.
-10. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
+16. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
 
 ### Definir un cliente (API)
 
@@ -414,6 +417,7 @@ npm run dev         # desarrollo (compila el paquete React y levanta Next)
 npm run build       # build de producción
 npm start           # servir build
 npm run typecheck   # tsc --noEmit
+npm test            # tests (vitest): facturación, webhook, pagos, roles, horas, vencimientos, monitoreo
 npm run build:react # compila solo el paquete magon-pay-react
 npm run pack:react  # genera el .tgz instalable del paquete
 ```

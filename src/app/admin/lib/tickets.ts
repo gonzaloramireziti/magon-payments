@@ -38,6 +38,8 @@ export type Ticket = {
   // Análisis del agente y respuestas del equipo (migración 009; pueden faltar antes).
   triage?: TriageResult | null;
   decisions?: Decision[];
+  // Proyecto al que pertenece (migración 015).
+  project_id?: string | null;
   // Issue en el repo del cliente donde trabaja Claude Code (migración 010).
   github_issue?: GithubIssueLink | null;
 };

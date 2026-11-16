@@ -72,6 +72,7 @@ import type { TicketChanges } from "./Board";
 import { buildTicketPrompt } from "./prompt";
 import { AgentPanel } from "./AgentPanel";
 import { TicketTime } from "../sections/TimeWidgets";
+import type { Project } from "../sections/Projects";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -188,6 +189,8 @@ export function TicketDrawer({
   onClose,
   onChange,
   onLocalUpdate,
+  projects = [],
+  onProjectsChange,
 }: {
   ticket: Ticket | null;
   me: Me;
@@ -198,6 +201,8 @@ export function TicketDrawer({
   onClose: () => void;
   onChange: (id: string, changes: TicketChanges) => Promise<void>;
   onLocalUpdate: (id: string, changes: Partial<Ticket>) => void;
+  projects?: Project[];
+  onProjectsChange?: (projects: Project[]) => void;
 }) {
   const mobile = useMediaQuery("(max-width: 48em)");
   const [tab, setTab] = useState<string | null>("detalle");
@@ -581,6 +586,31 @@ export function TicketDrawer({
 
         <Tabs.Panel value="detalle" p="md">
           <Stack gap="md">
+            {projects.some((p) => p.client_id === ticket.client_id) && (
+              <Select
+                label="Proyecto"
+                placeholder="Sin proyecto"
+                size="xs"
+                w={280}
+                data={projects
+                  .filter((p) => p.client_id === ticket.client_id && (p.id === ticket.project_id || !["delivered", "cancelled"].includes(p.status)))
+                  .map((p) => ({ value: p.id, label: p.name }))}
+                value={ticket.project_id ?? null}
+                clearable
+                onChange={async (value) => {
+                  try {
+                    const data = await api<{ projects: Project[] }>("/api/admin/projects", {
+                      method: "POST",
+                      json: { link: { ticketId: ticket.id, projectId: value } },
+                    });
+                    onLocalUpdate(ticket.id, { project_id: value });
+                    onProjectsChange?.(data.projects);
+                  } catch (error) {
+                    notifyError(error);
+                  }
+                }}
+              />
+            )}
             <Field label={ticket.type === "bug" ? "Qué estaba haciendo" : "Qué necesita y para qué"}>
               <Prose value={ticket.description} />
             </Field>

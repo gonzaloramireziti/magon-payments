@@ -277,3 +277,27 @@ export async function notifyAdmins(event: string, message: { subject: string; te
     return 0;
   }
 }
+
+/** Aviso a un usuario puntual por sus canales activos (recordatorios de la agenda). */
+export async function notifyUser(userId: string, event: string, message: { subject: string; text: string }): Promise<boolean> {
+  try {
+    const [target] = await recipients({ onlyUserId: userId });
+    if (!target) return false;
+    let sent = false;
+    await Promise.allSettled(
+      activeChannels(target.channels).map(async (channel) => {
+        try {
+          await send(channel, target.channels, message);
+          sent = true;
+          await log({ userId, channel, event, ticketId: null, ok: true });
+        } catch (err) {
+          await log({ userId, channel, event, ticketId: null, ok: false, error: (err as Error).message });
+        }
+      })
+    );
+    return sent;
+  } catch (error) {
+    console.error("[notify] aviso a usuario", error);
+    return false;
+  }
+}

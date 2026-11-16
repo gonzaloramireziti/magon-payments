@@ -66,6 +66,9 @@ npm run dev                  # http://localhost:3000
 > `supabase/migrations/014_infra.sql`. El monitoreo corre desde el workflow `.github/workflows/uptime.yml`
 > cada 10 minutos: cargá en el repo los secretos de Actions `MAGON_URL` (URL del panel) y `CRON_SECRET`.
 
+> Para Proyectos, Ventas y la Agenda, ejecutá `supabase/migrations/015_projects_sales_agenda.sql`.
+> Los recordatorios de la agenda se mandan desde el mismo cron frecuente del monitoreo (cada 10 minutos).
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno
@@ -205,6 +208,15 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    proveedor y costo; avisa a los administradores 30, 7 y 1 día antes y el mismo día (cron
    `/api/cron/daily`). En *Monitoreo* se carga la URL de cada sistema: con 2 fallas seguidas se marca
    caído, se abre un ticket crítico y se avisa; cuando vuelve, avisa y lo comenta en el ticket.
+7. **Proyectos:** desarrollos grandes de un cliente con alcance, responsable, fecha de entrega, horas
+   estimadas, presupuesto (solo lo ven los admins) y etapas que se tildan. Cada ticket se puede asociar
+   a un proyecto desde su detalle: el avance y las horas del proyecto salen de sus tickets.
+8. **Ventas** (admins): prospectos por etapa (nuevo → contactado → propuesta → negociando), con
+   presupuesto, abono mensual esperado y próximo paso con fecha. «Ganado: pasar a cliente» crea el
+   cliente con su KEY y el abono, facturando desde el mes siguiente. Los seguimientos vencidos
+   aparecen en Mi día.
+9. **Agenda:** reuniones, llamadas y recordatorios en Mi día; a la hora llega el aviso por WhatsApp,
+   Discord o correo.
 7. **Mi día:** pantalla de inicio de cada usuario: sus tickets ordenados (para probar, en desarrollo,
    listos), las preguntas del agente que esperan respuesta, los tickets sin responsable (con botón para
    tomarlos), las horas de hoy y de la semana y, para los administradores, el estado de los cobros.

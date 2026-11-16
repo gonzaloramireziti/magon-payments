@@ -23,6 +23,8 @@ import type { TicketChanges } from "../board/Board";
 import { StatCard } from "./StatCard";
 import { EntryRow, LogTimeModal } from "./TimeWidgets";
 import { daysColor, daysText, KIND_LABEL, type Asset, type UptimeCheck } from "./Infra";
+import { AgendaCard } from "./Agenda";
+import type { Lead } from "./Sales";
 
 // Orden de lo que tengo para hacer: lo que espera que pruebe, después lo que estoy haciendo y lo listo.
 const STATUS_ORDER: Record<string, number> = { testing: 0, in_progress: 1, ready: 2, analysis: 3, new: 4, waiting: 5 };
@@ -57,7 +59,7 @@ export function Today({
   clients: Array<{ id: string; name: string }>;
   onOpenTicket: (id: string) => void;
   onPatch: (id: string, changes: TicketChanges) => Promise<void>;
-  go: (section: "tablero" | "horas" | "resumen" | "infraestructura") => void;
+  go: (section: "tablero" | "horas" | "resumen" | "infraestructura" | "ventas") => void;
 }) {
   const { running, available } = useTimer();
   const elapsed = useElapsed(running?.runningSince);
@@ -80,6 +82,19 @@ export function Today({
     api<{ assets: Asset[]; checks: UptimeCheck[] }>("/api/admin/infra")
       .then((data) => setInfra(data))
       .catch(() => setInfra(null));
+  }, [manage]);
+  const [followUps, setFollowUps] = useState<Lead[]>([]);
+  useEffect(() => {
+    if (!manage) return;
+    api<{ leads: Lead[] }>("/api/admin/sales")
+      .then((data) =>
+        setFollowUps(
+          data.leads
+            .filter((l) => !["won", "lost"].includes(l.stage) && l.next_step_date && l.next_step_date <= todayLocal())
+            .sort((a, b) => (a.next_step_date ?? "").localeCompare(b.next_step_date ?? ""))
+        )
+      )
+      .catch(() => setFollowUps([]));
   }, [manage]);
   const expiring = (infra?.assets ?? []).filter((a) => a.days_left !== null && a.days_left <= 30);
   const downChecks = (infra?.checks ?? []).filter((c) => c.active && c.status === "down");
@@ -196,6 +211,35 @@ export function Today({
           timer={me.id && available ? running?.ticketId ?? "" : null}
         />
         <Stack gap="md">
+          {me.id && <AgendaCard clients={clients} />}
+          {followUps.length > 0 && (
+            <Paper p="md">
+              <Text fw={600} mb="xs">
+                Seguimientos de ventas
+              </Text>
+              <Stack gap={4}>
+                {followUps.slice(0, 6).map((lead) => (
+                  <Group key={lead.id} justify="space-between" wrap="nowrap">
+                    <Text size="sm" truncate>
+                      {lead.company}
+                      {lead.next_step ? (
+                        <Text span size="xs" c="dimmed">
+                          {" "}
+                          · {lead.next_step}
+                        </Text>
+                      ) : null}
+                    </Text>
+                    <Badge size="xs" color={lead.next_step_date! < todayLocal() ? "red" : "yellow"} variant="light" style={{ flexShrink: 0 }}>
+                      {lead.next_step_date! < todayLocal() ? "Atrasado" : "Hoy"}
+                    </Badge>
+                  </Group>
+                ))}
+              </Stack>
+              <Button variant="subtle" size="xs" mt="xs" px={0} onClick={() => go("ventas")}>
+                Ver ventas
+              </Button>
+            </Paper>
+          )}
           {waiting.length > 0 && (
             <TicketList
               title="Esperan tu respuesta"

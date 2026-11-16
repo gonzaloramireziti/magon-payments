@@ -62,6 +62,10 @@ npm run dev                  # http://localhost:3000
 > Para la conversación con el cliente en los tickets, ejecutá `supabase/migrations/013_client_conversation.sql`:
 > agrega el estado «Esperando al cliente» y los mensajes que ve y responde el cliente desde «Mis reportes».
 
+> Para la sección Infraestructura (vencimientos y monitoreo de caídas), ejecutá
+> `supabase/migrations/014_infra.sql`. El monitoreo corre desde el workflow `.github/workflows/uptime.yml`
+> cada 10 minutos: cargá en el repo los secretos de Actions `MAGON_URL` (URL del panel) y `CRON_SECRET`.
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno
@@ -161,6 +165,9 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `GET/POST/PATCH/DELETE` | `/api/admin/costs` | Costos fijos mensuales (ARS/USD) |
 | `GET` | `/api/admin/dashboard?period=month\|all` | Ganancias, costos, deuda y cotización |
 | `POST` | `/api/admin/login` \| `/logout` | Sesión del panel `/admin` |
+| `GET/POST` | `/api/cron/daily` | Avisos de vencimientos (`x-cron-secret`) |
+| `GET/POST` | `/api/cron/uptime` | Monitoreo de caídas (`x-cron-secret`; lo llama el workflow «Monitoreo») |
+| `GET/POST/DELETE` | `/api/admin/infra` | Vencimientos y monitores (admins) |
 | `GET/POST` | `/api/cron/invoices` | Genera facturas del período y marca vencidas (`x-cron-secret`) |
 | `GET` | `/api/admin/billing/invoice?clientId=...&period=YYYY-MM` | Factura mensual en PDF (`all=1` = todos los clientes; `inline=1` la abre) |
 | `GET` | `/api/receipts?key=KEY&invoiceId=...` | Comprobante de pago en PDF (factura paga) |
@@ -194,6 +201,10 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    «Es una pregunta» el ticket pasa a *Esperando al cliente*; cuando responde, vuelve a *En análisis*
    y le avisa al responsable. Si se descartó por falta de información, el cliente también puede
    responder y el ticket se reabre. Las notas internas siguen sin verse.
+7. **Infraestructura** (admins): dominios, hosting, SSL y licencias de cada cliente con su vencimiento,
+   proveedor y costo; avisa a los administradores 30, 7 y 1 día antes y el mismo día (cron
+   `/api/cron/daily`). En *Monitoreo* se carga la URL de cada sistema: con 2 fallas seguidas se marca
+   caído, se abre un ticket crítico y se avisa; cuando vuelve, avisa y lo comenta en el ticket.
 7. **Mi día:** pantalla de inicio de cada usuario: sus tickets ordenados (para probar, en desarrollo,
    listos), las preguntas del agente que esperan respuesta, los tickets sin responsable (con botón para
    tomarlos), las horas de hoy y de la semana y, para los administradores, el estado de los cobros.

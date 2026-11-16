@@ -1,0 +1,26 @@
+# Monitoreo de caídas de los sistemas de los clientes: llama a /api/cron/uptime cada 10 minutos.
+# (El plan Hobby de Vercel solo corre crons una vez por día.)
+# Configurar en Settings → Secrets and variables → Actions:
+#   MAGON_URL    → https://pay.magon.com (URL del panel, sin barra final)
+#   CRON_SECRET  → el mismo CRON_SECRET de Vercel
+name: Monitoreo
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  uptime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Revisar sistemas
+        env:
+          MAGON_URL: ${{ secrets.MAGON_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$MAGON_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Faltan los secretos MAGON_URL / CRON_SECRET"; exit 0
+          fi
+          curl -fsS --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "$MAGON_URL/api/cron/uptime"

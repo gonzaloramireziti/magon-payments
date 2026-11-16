@@ -44,6 +44,7 @@ import {
   IconBook,
   IconHome,
   IconClockHour4,
+  IconServer,
 } from "@tabler/icons-react";
 import { Brand } from "./Brand";
 import { Board, applyLocal, type TicketChanges } from "./board/Board";
@@ -70,6 +71,7 @@ import { Costs } from "./sections/Costs";
 import { Users } from "./sections/Users";
 import { Today } from "./sections/Today";
 import { TimeSection } from "./sections/Time";
+import { InfraSection } from "./sections/Infra";
 import { HeaderTimer } from "./sections/TimeWidgets";
 import { refreshTimer } from "./lib/time";
 import { roleLabel, type Permission } from "@/lib/admin/roles";
@@ -86,6 +88,7 @@ type SectionId =
   | "clientes"
   | "cobros"
   | "costos"
+  | "infraestructura"
   | "documentacion"
   | "usuarios";
 
@@ -99,6 +102,7 @@ const SECTIONS: ReadonlyArray<{ id: SectionId; label: string; icon: typeof IconH
   { id: "clientes", label: "Clientes", icon: IconBuildingStore, permission: "manage" },
   { id: "cobros", label: "Cobros", icon: IconCash, permission: "finance" },
   { id: "costos", label: "Costos", icon: IconReceipt2, permission: "finance" },
+  { id: "infraestructura", label: "Infraestructura", icon: IconServer, permission: "manage" },
   { id: "documentacion", label: "Documentación", icon: IconBook },
   { id: "usuarios", label: "Usuarios", icon: IconUsers, permission: "manage" },
 ];
@@ -585,6 +589,9 @@ export function AdminApp({ me }: { me: Me }) {
         )}
         {section === "cobros" && allowed("cobros") && <Payments />}
         {section === "costos" && allowed("costos") && <Costs />}
+        {section === "infraestructura" && allowed("infraestructura") && (
+          <InfraSection clients={clients} onOpenTicket={setOpenTicketId} />
+        )}
         {section === "documentacion" && <DocsSection me={me} />}
         {section === "usuarios" && allowed("usuarios") && <Users me={me} users={users} reload={loadUsers} />}
 

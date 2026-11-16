@@ -238,3 +238,42 @@ export async function notifyReporterStatus(
     });
   }
 }
+
+/**
+ * Aviso operativo a los administradores (vencimientos, caídas): va por todos sus canales activos,
+ * sin mirar los eventos elegidos, porque no se puede dejar pasar. Sin la migración 012 (sin roles)
+ * va a todos los usuarios activos.
+ */
+export async function notifyAdmins(event: string, message: { subject: string; text: string }): Promise<number> {
+  try {
+    const supabase = getSupabaseAdmin();
+    let { data, error } = await supabase
+      .from("admin_users")
+      .select("id,notify_channels")
+      .eq("active", true)
+      .eq("role", "admin");
+    if (error && error.code === "42703") {
+      ({ data, error } = await supabase.from("admin_users").select("id,notify_channels").eq("active", true));
+    }
+    if (error) throw error;
+    let sent = 0;
+    await Promise.allSettled(
+      (data ?? []).flatMap((row) => {
+        const channels = parseChannels(row.notify_channels);
+        return activeChannels(channels).map(async (channel) => {
+          try {
+            await send(channel, channels, message);
+            sent += 1;
+            await log({ userId: row.id as string, channel, event, ticketId: null, ok: true });
+          } catch (err) {
+            await log({ userId: row.id as string, channel, event, ticketId: null, ok: false, error: (err as Error).message });
+          }
+        });
+      })
+    );
+    return sent;
+  } catch (error) {
+    console.error("[notify] avisos a admins", error);
+    return 0;
+  }
+}

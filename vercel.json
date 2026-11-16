@@ -6,6 +6,14 @@
     {
       "path": "/api/cron/invoices",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/uptime",
+      "schedule": "30 12 * * *"
     }
   ]
 }

@@ -55,6 +55,10 @@ npm run dev                  # http://localhost:3000
 > habilita en la actividad del ticket el registro de quién lo cargó. Sin esta migración la carga
 > manual funciona igual, pero no queda esa línea en la actividad.
 
+> Para los roles del panel y el registro de horas, ejecutá `supabase/migrations/012_roles_time.sql`:
+> agrega `admin_users.role` (los usuarios que ya existían quedan como administradores) y la tabla
+> `time_entries`. Sin esta migración todos siguen siendo admin y la sección Horas avisa que falta.
+
 > El backend usa la **service role key** (solo servidor). Las tablas tienen RLS activado sin políticas, así que `anon`/`authenticated` no acceden a nada.
 
 ### 2. Variables de entorno
@@ -150,6 +154,7 @@ https://TU-DOMINIO/api/webhooks/galiopay
 | `GET/POST/PATCH/DELETE` | `/api/admin/clients` | Alta/edición/borrado de clientes (sesión del panel o `x-admin-key`) |
 | `POST` | `/api/admin/tickets` | Carga manual de un ticket desde el panel (multipart con capturas en `attachments`, o JSON) |
 | `POST` | `/api/admin/payments` | Confirma un pago manual (efectivo/transferencia externa) |
+| `GET/POST/PATCH/DELETE` | `/api/admin/time` | Horas: listado por rango, carga a mano y cronómetro (`{ action: "start" \| "stop" }`) |
 | `GET/POST/PATCH/DELETE` | `/api/admin/costs` | Costos fijos mensuales (ARS/USD) |
 | `GET` | `/api/admin/dashboard?period=month\|all` | Ganancias, costos, deuda y cotización |
 | `POST` | `/api/admin/login` \| `/logout` | Sesión del panel `/admin` |
@@ -181,7 +186,26 @@ UI sencilla para cargar/editar clientes, ver la **deuda** de cada uno y **confir
    hasta 20.000 caracteres y «Limpiar formato de WhatsApp» saca fecha, hora y nombre de cada mensaje
    de una conversación copiada o exportada. No aplica la política de tipos del cliente ni el límite
    por hora del widget. El borrador queda guardado en el navegador hasta que se carga o se vacía.
-7. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
+7. **Mi día:** pantalla de inicio de cada usuario: sus tickets ordenados (para probar, en desarrollo,
+   listos), las preguntas del agente que esperan respuesta, los tickets sin responsable (con botón para
+   tomarlos), las horas de hoy y de la semana y, para los administradores, el estado de los cobros.
+8. **Horas:** cronómetro por ticket (▶ en Mi día o pestaña *Horas* del ticket; queda visible en la
+   cabecera mientras corre) o carga a mano (`1:30`, `2h`, `45m`). La sección *Horas* suma por cliente,
+   por ticket y por persona, con filtros de período y exportación a CSV para Excel. Cada uno ve y corrige
+   las suyas; los administradores ven las de todo el equipo.
+9. **Roles:** en *Usuarios* cada persona tiene un rol (se elige al invitarla y se cambia desde el menú):
+
+   | Rol | Ve |
+   | --- | --- |
+   | Administrador | Todo: Resumen, Clientes, Cobros, Costos, Usuarios, bóveda, agente y horas del equipo |
+   | Desarrollo | Mi día, Tablero, Terminados, Horas propias, Documentación, bóveda y agente de GitHub |
+   | Soporte | Mi día, Tablero, Terminados, Horas propias y Documentación |
+
+   Los permisos se controlan en la API (`src/lib/admin/access.ts`), no solo en la pantalla: sin acceso a
+   la plata, `/api/admin/clients` devuelve solo nombre, notas y repos. El rol se lee de la base en cada
+   pedido, así que un cambio de rol o una baja rige al instante. Siempre queda al menos un administrador.
+   El acceso de emergencia y la `ADMIN_API_KEY` son administradores.
+10. **WhatsApp:** botón por cliente que abre un mensaje simpático indicando el monto a pagar y la fecha límite (día 10).
 
 ### Definir un cliente (API)
 

@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { IntegrationError } from "@/lib/integrations/service";
 import { TriageError } from "@/lib/triage/analyze";
 import { runTriage, saveDecisions, saveManualTriage } from "@/lib/triage/service";
 import { forwardAnswers } from "@/lib/github/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +27,8 @@ async function readJson(request: NextRequest): Promise<Record<string, unknown> |
 
 // Analiza el ticket con Claude (API key del responsable), o guarda la respuesta pegada a mano ("reply").
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request);
+  if (session instanceof Response) return session;
   const body = await readJson(request);
   const ticketId = typeof body?.ticketId === "string" ? body.ticketId : "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");
@@ -42,8 +42,8 @@ export async function POST(request: NextRequest) {
 
 // Guarda las respuestas del equipo a las preguntas del análisis.
 export async function PUT(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request);
+  if (session instanceof Response) return session;
   const body = await readJson(request);
   const ticketId = typeof body?.ticketId === "string" ? body.ticketId : "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");

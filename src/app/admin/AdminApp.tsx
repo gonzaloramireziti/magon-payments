@@ -42,6 +42,8 @@ import {
   IconPlugConnected,
   IconSpeakerphone,
   IconBook,
+  IconHome,
+  IconClockHour4,
 } from "@tabler/icons-react";
 import { Brand } from "./Brand";
 import { Board, applyLocal, type TicketChanges } from "./board/Board";
@@ -66,34 +68,57 @@ import { Clients } from "./sections/Clients";
 import { Payments } from "./sections/Payments";
 import { Costs } from "./sections/Costs";
 import { Users } from "./sections/Users";
+import { Today } from "./sections/Today";
+import { TimeSection } from "./sections/Time";
+import { HeaderTimer } from "./sections/TimeWidgets";
+import { refreshTimer } from "./lib/time";
+import { roleLabel, type Permission } from "@/lib/admin/roles";
 import { api, notifyError } from "./lib/api";
 import { initials, relative } from "./lib/format";
 import { isClosed, type Me, type PanelUser, type Ticket } from "./lib/tickets";
 
-const SECTIONS = [
+type SectionId =
+  | "inicio"
+  | "tablero"
+  | "terminados"
+  | "horas"
+  | "resumen"
+  | "clientes"
+  | "cobros"
+  | "costos"
+  | "documentacion"
+  | "usuarios";
+
+// `permission`: la sección solo aparece para los roles que lo tienen (la API igual lo controla).
+const SECTIONS: ReadonlyArray<{ id: SectionId; label: string; icon: typeof IconHome; permission?: Permission }> = [
+  { id: "inicio", label: "Mi día", icon: IconHome },
   { id: "tablero", label: "Tablero", icon: IconLayoutKanban },
   { id: "terminados", label: "Terminados", icon: IconArchive },
-  { id: "resumen", label: "Resumen", icon: IconChartPie },
-  { id: "clientes", label: "Clientes", icon: IconBuildingStore },
-  { id: "cobros", label: "Cobros", icon: IconCash },
-  { id: "costos", label: "Costos", icon: IconReceipt2 },
+  { id: "horas", label: "Horas", icon: IconClockHour4 },
+  { id: "resumen", label: "Resumen", icon: IconChartPie, permission: "finance" },
+  { id: "clientes", label: "Clientes", icon: IconBuildingStore, permission: "manage" },
+  { id: "cobros", label: "Cobros", icon: IconCash, permission: "finance" },
+  { id: "costos", label: "Costos", icon: IconReceipt2, permission: "finance" },
   { id: "documentacion", label: "Documentación", icon: IconBook },
-  { id: "usuarios", label: "Usuarios", icon: IconUsers },
-] as const;
+  { id: "usuarios", label: "Usuarios", icon: IconUsers, permission: "manage" },
+];
 
-type SectionId = (typeof SECTIONS)[number]["id"];
-
-function sectionFromHash(): SectionId {
-  if (typeof window === "undefined") return "tablero";
+function sectionFromHash(allowed: ReadonlyArray<{ id: SectionId }>): SectionId {
+  if (typeof window === "undefined") return "inicio";
   const hash = window.location.hash.replace("#", "");
-  return SECTIONS.some((s) => s.id === hash) ? (hash as SectionId) : "tablero";
+  return allowed.some((s) => s.id === hash) ? (hash as SectionId) : "inicio";
 }
 
 // Referencia estable para clientes sin repos (evita re-render del drawer).
 const NO_REPOS: string[] = [];
 
 export function AdminApp({ me }: { me: Me }) {
-  const [section, setSection] = useState<SectionId>("tablero");
+  const sections = useMemo(
+    () => SECTIONS.filter((s) => !s.permission || me.permissions.includes(s.permission)),
+    [me.permissions]
+  );
+  const allowed = useCallback((id: SectionId) => sections.some((s) => s.id === id), [sections]);
+  const [section, setSection] = useState<SectionId>("inicio");
   const [navOpen, { toggle: toggleNav, close: closeNav }] = useDisclosure(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [ticketsState, setTicketsState] = useState<"loading" | "ready" | "unavailable">("loading");
@@ -119,11 +144,15 @@ export function AdminApp({ me }: { me: Me }) {
       setOpenTicketId(linked);
       window.history.replaceState(null, "", `${window.location.pathname}#tablero`);
     }
-    setSection(sectionFromHash());
-    const onHash = () => setSection(sectionFromHash());
+    setSection(sectionFromHash(sections));
+    const onHash = () => setSection(sectionFromHash(sections));
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+  }, [sections]);
+
+  useEffect(() => {
+    if (me.id) void refreshTimer();
+  }, [me.id]);
 
   const go = useCallback(
     (id: SectionId) => {
@@ -266,7 +295,7 @@ export function AdminApp({ me }: { me: Me }) {
 
   const actions: SpotlightActionData[] = useMemo(
     () => [
-      ...SECTIONS.map((s) => ({
+      ...sections.map((s) => ({
         id: `section-${s.id}`,
         label: s.label,
         description: "Ir a la sección",
@@ -286,7 +315,7 @@ export function AdminApp({ me }: { me: Me }) {
           setOpenTicketId(t.id);
         },
       })),
-      ...clients.map((c) => ({
+      ...(allowed("clientes") ? clients : []).map((c) => ({
         id: `client-${c.id}`,
         label: c.name,
         description: "Cliente",
@@ -298,7 +327,7 @@ export function AdminApp({ me }: { me: Me }) {
         },
       })),
     ],
-    [tickets, clients, go]
+    [tickets, clients, go, sections, allowed]
   );
 
   async function logout() {
@@ -350,6 +379,7 @@ export function AdminApp({ me }: { me: Me }) {
           </UnstyledButton>
 
           <Group gap="xs" wrap="nowrap">
+            <HeaderTimer onOpenTicket={setOpenTicketId} />
             <ActionIcon variant="default" size="lg" hiddenFrom="xs" onClick={() => spotlight.open()} aria-label="Buscar">
               <IconSearch size={18} />
             </ActionIcon>
@@ -449,7 +479,7 @@ export function AdminApp({ me }: { me: Me }) {
                     {me.name}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    {me.email ?? "Acceso de emergencia"}
+                    {me.email ?? "Acceso de emergencia"} · {roleLabel(me.role)}
                   </Text>
                 </Menu.Label>
                 <Menu.Divider />
@@ -477,7 +507,7 @@ export function AdminApp({ me }: { me: Me }) {
       </AppShell.Header>
 
       <AppShell.Navbar p="sm">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <NavLink
             key={s.id}
             label={s.label}
@@ -515,6 +545,20 @@ export function AdminApp({ me }: { me: Me }) {
           </Alert>
         )}
 
+        {section === "inicio" && (
+          <Today
+            me={me}
+            tickets={tickets}
+            clients={clients}
+            onOpenTicket={(id) => {
+              setOpenTicketId(id);
+              setUnseen((current) => current.filter((t) => t.id !== id));
+            }}
+            onPatch={patchTicket}
+            go={go}
+          />
+        )}
+        {section === "horas" && <TimeSection me={me} users={users} clients={clients} />}
         {section === "tablero" && (
           <Board
             me={me}
@@ -535,14 +579,14 @@ export function AdminApp({ me }: { me: Me }) {
         {section === "terminados" && (
           <Closed tickets={tickets} state={ticketsState} me={me} onOpen={setOpenTicketId} />
         )}
-        {section === "resumen" && <Overview onOpenBoard={() => go("tablero")} />}
-        {section === "clientes" && (
+        {section === "resumen" && allowed("resumen") && <Overview onOpenBoard={() => go("tablero")} />}
+        {section === "clientes" && allowed("clientes") && (
           <Clients initialSearch={clientFocus} onSearchConsumed={() => setClientFocus(null)} />
         )}
-        {section === "cobros" && <Payments />}
-        {section === "costos" && <Costs />}
+        {section === "cobros" && allowed("cobros") && <Payments />}
+        {section === "costos" && allowed("costos") && <Costs />}
         {section === "documentacion" && <DocsSection me={me} />}
-        {section === "usuarios" && <Users me={me} users={users} reload={loadUsers} />}
+        {section === "usuarios" && allowed("usuarios") && <Users me={me} users={users} reload={loadUsers} />}
 
         <TicketDrawer
           ticket={openedTicket}

@@ -1,3 +1,5 @@
+import type { Permission, Role } from "@/lib/admin/roles";
+
 export type TicketStatus = "new" | "analysis" | "ready" | "in_progress" | "testing" | "done" | "discarded";
 export type TicketUrgency = "low" | "medium" | "high" | "critical";
 export type TicketType = "bug" | "feature";
@@ -62,11 +64,19 @@ export type Activity = {
   createdAt: string;
 };
 
-export type Me = { id: string | null; name: string; email: string | null; emergency: boolean };
+export type Me = {
+  id: string | null;
+  name: string;
+  email: string | null;
+  emergency: boolean;
+  role: Role;
+  permissions: Permission[];
+};
 export type PanelUser = {
   id: string;
   name: string;
   email: string;
+  role: Role;
   active: boolean;
   pending: boolean;
   lastLoginAt: string | null;

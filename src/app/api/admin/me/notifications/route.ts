@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { availableChannels, getPrefs, NotifyError, savePrefs, sendTest } from "@/lib/notify/service";
 import { CHANNELS, type Channel } from "@/lib/notify/prefs";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +12,9 @@ function handleError(error: unknown) {
   return errorJson("No se pudieron procesar los avisos", 500, "NOTIFY_ERROR");
 }
 
-function currentUser(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return { error: errorJson("No autorizado", 401, "UNAUTHORIZED") };
+async function currentUser(request: NextRequest) {
+  const session = await requireActor(request);
+  if (session instanceof Response) return { error: session };
   if (!session.userId) {
     return { error: errorJson("Entrá con tu usuario para configurar tus avisos", 400, "EMERGENCY_SESSION") };
   }
@@ -22,7 +22,7 @@ function currentUser(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const user = currentUser(request);
+  const user = await currentUser(request);
   if ("error" in user) return user.error;
   try {
     return okJson({ prefs: await getPrefs(user.userId), available: availableChannels() });
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const user = currentUser(request);
+  const user = await currentUser(request);
   if ("error" in user) return user.error;
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -44,7 +44,7 @@ export async function PUT(request: NextRequest) {
 
 // Envío de prueba por un canal, con lo que el usuario tiene cargado (aunque no lo haya guardado).
 export async function POST(request: NextRequest) {
-  const user = currentUser(request);
+  const user = await currentUser(request);
   if ("error" in user) return user.error;
   try {
     const body = (await request.json()) as Record<string, unknown>;

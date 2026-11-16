@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import {
   accessLog,
   deleteItem,
@@ -11,6 +10,7 @@ import {
   VaultError,
 } from "@/lib/vault/service";
 import { isMissingTable } from "@/lib/tickets/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,8 @@ function handleError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "vault");
+  if (session instanceof Response) return session;
   try {
     const unlocked = isUnlocked(session, request.cookies.get(VAULT_COOKIE)?.value);
     return okJson({
@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "vault");
+  if (session instanceof Response) return session;
   try {
     const unlocked = isUnlocked(session, request.cookies.get(VAULT_COOKIE)?.value);
     return okJson({ item: await saveItem(session, unlocked, (await request.json()) as Record<string, unknown>) });
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "vault");
+  if (session instanceof Response) return session;
   try {
     const unlocked = isUnlocked(session, request.cookies.get(VAULT_COOKIE)?.value);
     await deleteItem(session, unlocked, request.nextUrl.searchParams.get("id") ?? "");

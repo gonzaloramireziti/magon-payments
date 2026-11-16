@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { deleteDoc, DocError, listDocs, saveDoc } from "@/lib/docs/service";
 import { isMissingTable } from "@/lib/tickets/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,8 @@ function handleError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!getAdminSession(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request);
+  if (guard instanceof Response) return guard;
   try {
     return okJson({ docs: await listDocs() });
   } catch (error) {
@@ -23,8 +24,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request);
+  if (session instanceof Response) return session;
   try {
     return okJson({ id: await saveDoc(session, (await request.json()) as Record<string, unknown>) });
   } catch (error) {
@@ -33,7 +34,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!getAdminSession(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request);
+  if (guard instanceof Response) return guard;
   const id = request.nextUrl.searchParams.get("id") ?? "";
   if (!id) return errorJson("Falta el id", 400, "MISSING_ID");
   try {

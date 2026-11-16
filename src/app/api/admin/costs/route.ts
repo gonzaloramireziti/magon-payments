@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { isAdminRequest } from "@/lib/admin/auth";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,8 @@ function parseCost(body: Record<string, unknown>) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("costs")
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
 
   let body: Record<string, unknown> = {};
   try {
@@ -48,7 +50,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
 
   let body: Record<string, unknown> = {};
   try {
@@ -83,7 +86,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
 
   let body: Record<string, unknown> = {};
   try {

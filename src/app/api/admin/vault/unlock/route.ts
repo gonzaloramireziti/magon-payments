@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession, isSecureRequest } from "@/lib/admin/auth";
+import { isSecureRequest } from "@/lib/admin/auth";
 import { unlock, VAULT_COOKIE, VaultError } from "@/lib/vault/service";
 import { UNLOCK_TTL_MS } from "@/lib/vault/crypto";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +20,8 @@ function cookie(request: NextRequest, value: string, maxAge: number) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "vault");
+  if (session instanceof Response) return session;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const token = await unlock(session, typeof body.password === "string" ? body.password : "");

@@ -1,13 +1,13 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { isUnlocked, reveal, VAULT_COOKIE, VaultError } from "@/lib/vault/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, json } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request, "vault");
+  if (session instanceof Response) return session;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const unlocked = isUnlocked(session, request.cookies.get(VAULT_COOKIE)?.value);

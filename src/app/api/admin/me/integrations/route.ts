@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import {
   configureRepoSecrets,
   getIntegrationStatus,
@@ -8,6 +7,7 @@ import {
   saveAnthropicKey,
   saveGithubToken,
 } from "@/lib/integrations/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +18,9 @@ function handleError(error: unknown) {
   return errorJson("No se pudieron procesar tus integraciones", 500, "INTEGRATIONS_ERROR");
 }
 
-function userSession(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return { error: errorJson("No autorizado", 401, "UNAUTHORIZED") };
+async function userSession(request: NextRequest) {
+  const session = await requireActor(request);
+  if (session instanceof Response) return { error: session };
   if (!session.userId) {
     return { error: errorJson("El acceso de emergencia no tiene integraciones: entrá con tu usuario.", 403, "NEEDS_USER") };
   }
@@ -28,7 +28,7 @@ function userSession(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const { userId, error } = userSession(request);
+  const { userId, error } = await userSession(request);
   if (!userId) return error;
   try {
     return okJson({ integrations: await getIntegrationStatus(userId) });
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
 // Body: { kind: "github" | "anthropic", secret: string }. El secreto no vuelve nunca.
 export async function PUT(request: NextRequest) {
-  const { userId, error } = userSession(request);
+  const { userId, error } = await userSession(request);
   if (!userId) return error;
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { userId, error } = userSession(request);
+  const { userId, error } = await userSession(request);
   if (!userId) return error;
   const kind = request.nextUrl.searchParams.get("kind");
   if (kind !== "github" && kind !== "anthropic") return errorJson("Integración desconocida", 400, "BAD_KIND");
@@ -67,7 +67,7 @@ export async function DELETE(request: NextRequest) {
 
 // Prepara los repos del usuario para el agente (secreto MAGON_GH_TOKEN). Body: { action: "repo-secrets" }
 export async function POST(request: NextRequest) {
-  const { userId, error } = userSession(request);
+  const { userId, error } = await userSession(request);
   if (!userId) return error;
   try {
     const body = (await request.json()) as Record<string, unknown>;

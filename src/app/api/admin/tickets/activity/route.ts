@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin/auth";
 import { addComment, listActivity, TicketError } from "@/lib/tickets/service";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,8 @@ function handleError(error: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!getAdminSession(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request);
+  if (guard instanceof Response) return guard;
   const ticketId = request.nextUrl.searchParams.get("ticketId") ?? "";
   if (!ticketId) return errorJson("Falta el ticket", 400, "MISSING_TICKET");
   try {
@@ -23,8 +24,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = getAdminSession(request);
-  if (!session) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const session = await requireActor(request);
+  if (session instanceof Response) return session;
   try {
     const body = (await request.json()) as Record<string, unknown>;
     await addComment(typeof body.ticketId === "string" ? body.ticketId : "", body.body, session);

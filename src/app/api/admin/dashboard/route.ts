@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { isAdminRequest } from "@/lib/admin/auth";
 import { subscription } from "@/lib/env";
 import { getUsdRate } from "@/lib/exchange/rate";
 import { startOfLocalMonthISO } from "@/lib/subscription/period";
+import { requireActor } from "@/lib/admin/access";
 import { errorJson, okJson } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,8 @@ function totals(ars: number, usd: number, rate: number) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAdminRequest(request)) return errorJson("No autorizado", 401, "UNAUTHORIZED");
+  const guard = await requireActor(request, "finance");
+  if (guard instanceof Response) return guard;
 
   const supabase = getSupabaseAdmin();
 

@@ -12,19 +12,25 @@ import {
   Menu,
   Modal,
   Paper,
+  Select,
   Stack,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconCheck, IconCopy, IconDots, IconLink, IconPlus, IconUserCheck, IconUserOff } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconDots, IconLink, IconPlus, IconShield, IconUserCheck, IconUserOff } from "@tabler/icons-react";
 import { api, notifyError, notifyOk } from "../lib/api";
 import { initials, relative } from "../lib/format";
 import type { Me, PanelUser } from "../lib/tickets";
+import { ROLES, roleLabel, type Role } from "@/lib/admin/roles";
+
+const ROLE_COLOR: Record<Role, string> = { admin: "brand", dev: "blue", soporte: "gray" };
+const ROLE_OPTIONS = ROLES.map((r) => ({ value: r.value, label: r.label }));
 
 export function Users({ me, users, reload }: { me: Me; users: PanelUser[]; reload: () => Promise<void> }) {
   const [creating, setCreating] = useState(false);
   const [invite, setInvite] = useState<{ name: string; url: string } | null>(null);
+  const [roleFor, setRoleFor] = useState<PanelUser | null>(null);
 
   async function regenerate(user: PanelUser) {
     try {
@@ -83,6 +89,9 @@ export function Users({ me, users, reload }: { me: Me; users: PanelUser[]; reloa
                     {user.name}
                     {user.id === me.id ? " (vos)" : ""}
                   </Text>
+                  <Badge size="xs" variant="light" color={ROLE_COLOR[user.role]}>
+                    {roleLabel(user.role)}
+                  </Badge>
                   {!user.active ? (
                     <Badge size="xs" color="gray">
                       Inactivo
@@ -105,6 +114,9 @@ export function Users({ me, users, reload }: { me: Me; users: PanelUser[]; reloa
                 </ActionIcon>
               </Menu.Target>
               <Menu.Dropdown>
+                <Menu.Item leftSection={<IconShield size={14} />} onClick={() => setRoleFor(user)} disabled={user.id === me.id}>
+                  Cambiar rol
+                </Menu.Item>
                 <Menu.Item leftSection={<IconLink size={14} />} onClick={() => regenerate(user)} disabled={!user.active}>
                   {user.pending ? "Generar link de invitación" : "Blanquear contraseña (nuevo link)"}
                 </Menu.Item>
@@ -126,6 +138,17 @@ export function Users({ me, users, reload }: { me: Me; users: PanelUser[]; reloa
           </Text>
         )}
       </Paper>
+
+      {roleFor && (
+        <RoleModal
+          user={roleFor}
+          onClose={() => setRoleFor(null)}
+          onSaved={() => {
+            setRoleFor(null);
+            void reload();
+          }}
+        />
+      )}
 
       {creating && (
         <CreateUserModal
@@ -164,15 +187,62 @@ export function Users({ me, users, reload }: { me: Me; users: PanelUser[]; reloa
   );
 }
 
-function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string, url: string) => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+function RoleHelp({ role }: { role: Role }) {
+  return (
+    <Text size="xs" c="dimmed">
+      {ROLES.find((r) => r.value === role)?.description}
+    </Text>
+  );
+}
+
+function RoleModal({ user, onClose, onSaved }: { user: PanelUser; onClose: () => void; onSaved: () => void }) {
+  const [role, setRole] = useState<Role>(user.role);
   const [saving, setSaving] = useState(false);
 
   async function save() {
     setSaving(true);
     try {
-      const data = await api<{ inviteUrl: string }>("/api/admin/users", { method: "POST", json: { name, email } });
+      await api("/api/admin/users", { method: "PATCH", json: { id: user.id, role } });
+      notifyOk(`${user.name} ahora es ${roleLabel(role)}`);
+      onSaved();
+    } catch (error) {
+      notifyError(error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal opened onClose={onClose} title={`Rol de ${user.name}`}>
+      <Stack gap="sm">
+        <Select label="Rol" data={ROLE_OPTIONS} value={role} onChange={(v) => v && setRole(v as Role)} allowDeselect={false} />
+        <RoleHelp role={role} />
+        <Text size="xs" c="dimmed">
+          El cambio rige en la próxima pantalla que cargue (no hace falta que vuelva a entrar).
+        </Text>
+        <Group justify="flex-end" mt="sm">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={save} loading={saving} disabled={role === user.role}>
+            Guardar
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string, url: string) => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("dev");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const data = await api<{ inviteUrl: string }>("/api/admin/users", { method: "POST", json: { name, email, role } });
       onCreated(name.trim(), data.inviteUrl);
     } catch (error) {
       notifyError(error);
@@ -191,6 +261,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
         />
+        <Select label="Rol" data={ROLE_OPTIONS} value={role} onChange={(v) => v && setRole(v as Role)} allowDeselect={false} />
+        <RoleHelp role={role} />
         <Group justify="flex-end" mt="sm">
           <Button variant="default" onClick={onClose}>
             Cancelar

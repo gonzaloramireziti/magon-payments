@@ -274,14 +274,17 @@ export function AgentPanel({
         </Stack>
       )}
 
-      <GithubSection
-        ticket={ticket}
-        me={me}
-        repos={repos}
-        clientContext={clientContext}
-        activity={activity}
-        onUpdated={onUpdated}
-      />
+      {/* Mandar a GitHub gasta el plan de quien lo manda y escribe en los repos: solo con permiso de agente. */}
+      {me.permissions.includes("agent") && (
+        <GithubSection
+          ticket={ticket}
+          me={me}
+          repos={repos}
+          clientContext={clientContext}
+          activity={activity}
+          onUpdated={onUpdated}
+        />
+      )}
 
       <Modal opened={manualOpen} onClose={() => setManualOpen(false)} title={`Analizar el ticket #${ticket.number} con tu plan`} size="xl">
         <Stack gap="sm">

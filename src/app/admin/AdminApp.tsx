@@ -44,6 +44,9 @@ import {
   IconBook,
   IconHome,
   IconClockHour4,
+  IconServer,
+  IconBriefcase,
+  IconTargetArrow,
 } from "@tabler/icons-react";
 import { Brand } from "./Brand";
 import { Board, applyLocal, type TicketChanges } from "./board/Board";
@@ -70,6 +73,9 @@ import { Costs } from "./sections/Costs";
 import { Users } from "./sections/Users";
 import { Today } from "./sections/Today";
 import { TimeSection } from "./sections/Time";
+import { InfraSection } from "./sections/Infra";
+import { ProjectsSection, type Project } from "./sections/Projects";
+import { SalesSection } from "./sections/Sales";
 import { HeaderTimer } from "./sections/TimeWidgets";
 import { refreshTimer } from "./lib/time";
 import { roleLabel, type Permission } from "@/lib/admin/roles";
@@ -81,11 +87,14 @@ type SectionId =
   | "inicio"
   | "tablero"
   | "terminados"
+  | "proyectos"
   | "horas"
   | "resumen"
   | "clientes"
+  | "ventas"
   | "cobros"
   | "costos"
+  | "infraestructura"
   | "documentacion"
   | "usuarios";
 
@@ -94,11 +103,14 @@ const SECTIONS: ReadonlyArray<{ id: SectionId; label: string; icon: typeof IconH
   { id: "inicio", label: "Mi día", icon: IconHome },
   { id: "tablero", label: "Tablero", icon: IconLayoutKanban },
   { id: "terminados", label: "Terminados", icon: IconArchive },
+  { id: "proyectos", label: "Proyectos", icon: IconBriefcase },
   { id: "horas", label: "Horas", icon: IconClockHour4 },
   { id: "resumen", label: "Resumen", icon: IconChartPie, permission: "finance" },
   { id: "clientes", label: "Clientes", icon: IconBuildingStore, permission: "manage" },
+  { id: "ventas", label: "Ventas", icon: IconTargetArrow, permission: "manage" },
   { id: "cobros", label: "Cobros", icon: IconCash, permission: "finance" },
   { id: "costos", label: "Costos", icon: IconReceipt2, permission: "finance" },
+  { id: "infraestructura", label: "Infraestructura", icon: IconServer, permission: "manage" },
   { id: "documentacion", label: "Documentación", icon: IconBook },
   { id: "usuarios", label: "Usuarios", icon: IconUsers, permission: "manage" },
 ];
@@ -125,6 +137,8 @@ export function AdminApp({ me }: { me: Me }) {
   const [users, setUsers] = useState<PanelUser[]>([]);
   const [clients, setClients] = useState<Array<{ id: string; name: string; notes: string | null; repos?: string[] | null; active?: boolean }>>([]);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsState, setProjectsState] = useState<"loading" | "ready" | "unavailable">("loading");
   const [clientFocus, setClientFocus] = useState<string | null>(null);
   const [unseen, setUnseen] = useState<Summary[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -188,13 +202,31 @@ export function AdminApp({ me }: { me: Me }) {
     }
   }, []);
 
-  useEffect(() => {
-    void loadTickets();
-    void loadUsers();
+  const loadProjects = useCallback(async () => {
+    try {
+      const data = await api<{ projects: Project[] }>("/api/admin/projects");
+      setProjects(data.projects);
+      setProjectsState("ready");
+    } catch (error) {
+      setProjectsState((error as { code?: string }).code === "MIGRATION_MISSING" ? "unavailable" : "ready");
+    }
+  }, []);
+
+  const loadClients = useCallback(() => {
     api<{ clients: Array<{ id: string; name: string; notes: string | null; repos?: string[] | null; active?: boolean }> }>("/api/admin/clients")
       .then((data) => setClients(data.clients))
       .catch(() => setClients([]));
-  }, [loadTickets, loadUsers]);
+  }, []);
+
+  useEffect(() => {
+    void loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => {
+    void loadTickets();
+    void loadUsers();
+    loadClients();
+  }, [loadTickets, loadUsers, loadClients]);
 
   useEffect(() => {
     setDesktopOn(desktopEnabled());
@@ -559,6 +591,10 @@ export function AdminApp({ me }: { me: Me }) {
           />
         )}
         {section === "horas" && <TimeSection me={me} users={users} clients={clients} />}
+        {section === "proyectos" && (
+          <ProjectsSection me={me} projects={projects} state={projectsState} clients={clients} users={users} onChange={setProjects} />
+        )}
+        {section === "ventas" && allowed("ventas") && <SalesSection users={users} onClientCreated={loadClients} />}
         {section === "tablero" && (
           <Board
             me={me}
@@ -585,6 +621,9 @@ export function AdminApp({ me }: { me: Me }) {
         )}
         {section === "cobros" && allowed("cobros") && <Payments />}
         {section === "costos" && allowed("costos") && <Costs />}
+        {section === "infraestructura" && allowed("infraestructura") && (
+          <InfraSection clients={clients} onOpenTicket={setOpenTicketId} />
+        )}
         {section === "documentacion" && <DocsSection me={me} />}
         {section === "usuarios" && allowed("usuarios") && <Users me={me} users={users} reload={loadUsers} />}
 
@@ -595,6 +634,8 @@ export function AdminApp({ me }: { me: Me }) {
           labelOptions={Array.from(new Set(tickets.flatMap((t) => t.labels))).sort()}
           clientContext={openedTicket ? clientContexts[openedTicket.client_id] ?? null : null}
           clientRepos={openedTicket ? clientRepos[openedTicket.client_id] ?? NO_REPOS : NO_REPOS}
+          projects={projects}
+          onProjectsChange={setProjects}
           onClose={() => setOpenTicketId(null)}
           onChange={patchTicket}
           onLocalUpdate={updateTicketLocal}

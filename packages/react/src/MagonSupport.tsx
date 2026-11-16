@@ -17,6 +17,7 @@ export type MagonTicketUrgency = "low" | "medium" | "high" | "critical";
 export type MagonTicketStatus =
   | "new"
   | "analysis"
+  | "waiting"
   | "ready"
   | "in_progress"
   | "testing"
@@ -39,7 +40,11 @@ export type MagonClientTicket = {
   resolvedAt: string | null;
   /** Mensaje del equipo al cerrar: motivo del descarte o nota de la resolución. */
   note?: string | null;
+  /** Conversación con el equipo: preguntas y respuestas sobre el reporte. */
+  messages?: MagonTicketMessage[];
 };
+
+export type MagonTicketMessage = { from: "team" | "client"; author: string | null; body: string; at: string };
 
 export type MagonSupportLabels = {
   trigger: string;
@@ -71,6 +76,13 @@ export type MagonSupportLabels = {
   updatesView: string;
   noteDiscarded: string;
   noteDone: string;
+  needsReply: string;
+  replyPlaceholder: string;
+  replySend: string;
+  replySending: string;
+  replyOpen: string;
+  teamName: string;
+  youName: string;
   urgency: Record<MagonTicketUrgency, string>;
   status: Record<MagonTicketStatus, string>;
 };
@@ -105,6 +117,13 @@ export const DEFAULT_SUPPORT_LABELS: MagonSupportLabels = {
   updatesView: "Ver mis reportes",
   noteDiscarded: "Motivo",
   noteDone: "Nota del equipo",
+  needsReply: "Necesitamos que nos respondas para seguir con este reporte.",
+  replyPlaceholder: "Escribí tu respuesta…",
+  replySend: "Responder",
+  replySending: "Enviando...",
+  replyOpen: "Responder o agregar información",
+  teamName: "Equipo",
+  youName: "Vos",
   urgency: {
     low: "Puedo seguir trabajando normalmente",
     medium: "Me complica, pero puedo seguir",
@@ -114,6 +133,7 @@ export const DEFAULT_SUPPORT_LABELS: MagonSupportLabels = {
   status: {
     new: "Recibido",
     analysis: "En análisis",
+    waiting: "Necesitamos tu respuesta",
     ready: "Planificado",
     in_progress: "En desarrollo",
     testing: "En prueba",
@@ -174,6 +194,18 @@ async function shrinkImage(file: File): Promise<File> {
   }
 }
 
+/**
+ * Lo que se sigue de cada reporte para avisar novedades: el estado y, si el equipo escribió, cuántos
+ * mensajes suyos hay ("waiting:2"). Así un mensaje nuevo del equipo también avisa aunque no cambie
+ * el estado.
+ */
+function watched(tickets: MagonClientTicket[]) {
+  return tickets.map((ticket) => {
+    const team = (ticket.messages ?? []).filter((m) => m.from === "team").length;
+    return { number: ticket.number, title: ticket.title, status: team ? `${ticket.status}:${team}` : ticket.status };
+  });
+}
+
 export function MagonSupport(props: MagonSupportProps) {
   const {
     clientKey,
@@ -227,6 +259,12 @@ export function MagonSupport(props: MagonSupportProps) {
   const [sent, setSent] = useState<number | null>(null);
   const [mine, setMine] = useState<MagonClientTicket[] | null>(null);
   const [changes, setChanges] = useState<StatusChange[]>([]);
+  // Respuestas en «Mis reportes»: borrador por reporte, cuál se está enviando y el error.
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [replyingTo, setReplyingTo] = useState<number | null>(null);
+  const [replyOpenFor, setReplyOpenFor] = useState<number | null>(null);
+  const [replyError, setReplyError] = useState<{ number: number; message: string } | null>(null);
+  const [refresh, setRefresh] = useState(0);
   const [toastVisible, setToastVisible] = useState(false);
 
   // Identidad de quien mira: filtra en el server los reportes que cargó él. Sin identidad,
@@ -264,15 +302,17 @@ export function MagonSupport(props: MagonSupportProps) {
       const response = await fetch(ticketsUrl, { cache: "no-store" });
       const data = await response.json();
       if (!response.ok || !data.ok) return;
-      const result = detectChanges(readWatch(), data.tickets as MagonClientTicket[], !reporterId && !reporterEmail);
+      const result = detectChanges(readWatch(), watched(data.tickets as MagonClientTicket[]), !reporterId && !reporterEmail);
       writeWatch(result.next);
       if (result.changes.length === 0) return;
+      // Afuera, los estados limpios (sin la cuenta de mensajes de `watched`).
+      const found = result.changes.map((c) => ({ ...c, from: c.from.split(":")[0], to: c.to.split(":")[0] }));
       setChanges((current) => {
-        const others = current.filter((c) => !result.changes.some((n) => n.number === c.number));
-        return [...result.changes, ...others].slice(0, 10);
+        const others = current.filter((c) => !found.some((n) => n.number === c.number));
+        return [...found, ...others].slice(0, 10);
       });
       setToastVisible(true);
-      onStatusChange?.(result.changes);
+      onStatusChange?.(found);
     } catch {
       /* sin conexión: se reintenta en la próxima vuelta */
     }
@@ -326,10 +366,40 @@ export function MagonSupport(props: MagonSupportProps) {
         const state = readWatch();
         setMine(onlyMine ? tickets.filter((t) => state.mine.includes(t.number)) : tickets);
         // Al mirar la lista quedan vistos: se actualiza el último estado conocido.
-        writeWatch(detectChanges(state, tickets, onlyMine).next);
+        writeWatch(detectChanges(state, watched(tickets), onlyMine).next);
       })
       .catch(() => setMine([]));
-  }, [isOpen, tab, ticketsUrl, sent, readWatch, writeWatch, reporterId, reporterEmail]);
+  }, [isOpen, tab, ticketsUrl, sent, refresh, readWatch, writeWatch, reporterId, reporterEmail]);
+
+  async function sendReply(number: number) {
+    const body = (drafts[number] ?? "").trim();
+    if (!body) return;
+    setReplyingTo(number);
+    setReplyError(null);
+    try {
+      const response = await fetch(`${base}/api/support/tickets/reply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientKey,
+          number,
+          body,
+          reporterRef: reporterId,
+          reporterEmail,
+          reporterName: reporter?.name ? String(reporter.name) : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setDrafts((current) => ({ ...current, [number]: "" }));
+      setReplyOpenFor(null);
+      setRefresh((n) => n + 1);
+    } catch (err) {
+      setReplyError({ number, message: (err as Error).message });
+    } finally {
+      setReplyingTo(null);
+    }
+  }
 
   // Lo que cambió se marca como visto cuando cierra la ventana después de ver "Mis reportes".
   const [highlight, setHighlight] = useState<number[]>([]);
@@ -626,7 +696,12 @@ export function MagonSupport(props: MagonSupportProps) {
                       <span>
                         #{ticket.number} · {ticket.type === "bug" ? l.typeBug : l.typeFeature}
                       </span>
-                      <span style={{ fontWeight: 700, color: ticket.status === "done" ? "#4ade80" : t.text }}>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          color: ticket.status === "done" ? "#4ade80" : ticket.status === "waiting" ? "#fbbf24" : t.text,
+                        }}
+                      >
                         {l.status[ticket.status]}
                       </span>
                     </div>
@@ -649,6 +724,67 @@ export function MagonSupport(props: MagonSupportProps) {
                         </strong>{" "}
                         {ticket.note}
                       </div>
+                    )}
+                    {ticket.status === "waiting" && (
+                      <div style={{ fontSize: 13, marginTop: 6, color: "#fbbf24" }}>{l.needsReply}</div>
+                    )}
+                    {(ticket.messages ?? []).length > 0 && (
+                      <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                        {(ticket.messages ?? []).map((message, index) => (
+                          <div
+                            key={`${message.at}-${index}`}
+                            style={{
+                              justifySelf: message.from === "client" ? "end" : "start",
+                              maxWidth: "88%",
+                              fontSize: 13,
+                              padding: "6px 9px",
+                              borderRadius: Math.max(6, t.radius - 6),
+                              background: message.from === "client" ? t.background : "transparent",
+                              border: `1px solid ${t.border}`,
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            <div style={{ fontSize: 11, color: t.muted, marginBottom: 2 }}>
+                              {message.from === "client" ? message.author ?? l.youName : l.teamName} ·{" "}
+                              {new Date(message.at).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}
+                            </div>
+                            {message.body}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {ticket.status === "waiting" || replyOpenFor === ticket.number || (ticket.messages ?? []).length > 0 ? (
+                      <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                        <textarea
+                          style={{ ...field, minHeight: 60, resize: "vertical", fontSize: 13 }}
+                          placeholder={l.replyPlaceholder}
+                          value={drafts[ticket.number] ?? ""}
+                          maxLength={5000}
+                          onChange={(e) => setDrafts((current) => ({ ...current, [ticket.number]: e.target.value }))}
+                        />
+                        {replyError?.number === ticket.number && (
+                          <div style={{ color: t.danger, fontSize: 12 }}>{replyError.message}</div>
+                        )}
+                        <button
+                          type="button"
+                          style={{ ...primary, padding: "8px 12px", fontSize: 13, justifySelf: "end" }}
+                          disabled={replyingTo === ticket.number || !(drafts[ticket.number] ?? "").trim()}
+                          onClick={() => void sendReply(ticket.number)}
+                        >
+                          {replyingTo === ticket.number ? l.replySending : l.replySend}
+                        </button>
+                      </div>
+                    ) : (
+                      ticket.status === "discarded" && (
+                        <button
+                          type="button"
+                          onClick={() => setReplyOpenFor(ticket.number)}
+                          style={{ ...secondary, padding: "6px 10px", fontSize: 12, marginTop: 8 }}
+                        >
+                          {l.replyOpen}
+                        </button>
+                      )
                     )}
                   </div>
                 ))}

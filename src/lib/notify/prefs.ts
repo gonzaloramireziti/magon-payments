@@ -141,6 +141,7 @@ export function buildMessage(event: NotifyEvent | "test", ticket: TicketForMessa
 export const CLIENT_STATUS_LABEL: Record<string, string> = {
   new: "Recibido",
   analysis: "En análisis",
+  waiting: "Necesitamos tu respuesta",
   ready: "Planificado",
   in_progress: "En desarrollo",
   testing: "En prueba",
@@ -150,6 +151,7 @@ export const CLIENT_STATUS_LABEL: Record<string, string> = {
 
 const STATUS_DETAIL: Record<string, string> = {
   analysis: "Ya lo estamos revisando.",
+  waiting: "Necesitamos más información para seguir.",
   ready: "Ya está planificado para resolverlo.",
   in_progress: "Lo estamos resolviendo.",
   testing: "Lo estamos probando antes de publicarlo.",
@@ -181,5 +183,33 @@ export function buildReporterStatusEmail(
     ]
       .filter((line, i, all) => !(line === "" && all[i - 1] === ""))
       .join("\n"),
+  };
+}
+
+/** Correo al cliente cuando el equipo le escribe en su reporte (pregunta o aviso). */
+export function buildReporterMessageEmail(
+  ticket: Pick<TicketForMessage, "number" | "title" | "client_name">,
+  reporterName: string | null,
+  message: string,
+  asking: boolean
+) {
+  const hello = reporterName?.trim() ? `Hola ${reporterName.trim().split(/\s+/)[0]},` : "Hola,";
+  return {
+    subject: asking
+      ? `Necesitamos tu respuesta sobre el reporte #${ticket.number}`
+      : `Novedades de tu reporte #${ticket.number}`,
+    text: [
+      hello,
+      "",
+      asking
+        ? `Para seguir con tu reporte #${ticket.number} «${ticket.title}» necesitamos que nos cuentes algo más:`
+        : `El equipo te escribió en tu reporte #${ticket.number} «${ticket.title}»:`,
+      "",
+      message.trim(),
+      "",
+      "Respondé desde el botón «Reportar» de tu sistema, en la pestaña «Mis reportes». Ahí queda toda la conversación.",
+      "",
+      "Equipo de Magon",
+    ].join("\n"),
   };
 }

@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { notify } from "@/lib/env";
 import {
   buildMessage,
+  buildReporterMessageEmail,
   buildReporterStatusEmail,
   channelProblems,
   parseChannels,
@@ -181,6 +182,33 @@ export async function sendTest(userId: string, channel: Channel, rawChannels: un
 
 // Avisa por correo a quien cargó el reporte que cambió de estado. Solo si el reporte tiene email y
 // el correo está configurado; nunca hace fallar el cambio de estado.
+/** Correo al cliente con el mensaje que le dejó el equipo en el reporte. */
+export async function notifyReporterMessage(
+  ticket: TicketForMessage,
+  reporter: { name: string | null; email: string | null },
+  message: string,
+  asking: boolean
+): Promise<boolean> {
+  if (!reporter.email || !availableChannels().email) return false;
+  const email = buildReporterMessageEmail(ticket, reporter.name, message, asking);
+  let ok = true;
+  let failure: string | null = null;
+  try {
+    await post(
+      "https://api.resend.com/emails",
+      { from: notify.emailFrom, to: [reporter.email], subject: email.subject, text: email.text },
+      { authorization: `Bearer ${notify.resendApiKey}` }
+    );
+  } catch (error) {
+    ok = false;
+    failure = (error as Error).message;
+  }
+  await getSupabaseAdmin()
+    .from("notification_log")
+    .insert({ user_id: null, channel: "email", event: "reporter_message", ticket_id: ticket.id, ok, error: failure });
+  return ok;
+}
+
 export async function notifyReporterStatus(
   ticket: TicketForMessage,
   reporter: { name: string | null; email: string | null },
@@ -208,5 +236,68 @@ export async function notifyReporterStatus(
       ok: false,
       error: (error as Error).message,
     });
+  }
+}
+
+/**
+ * Aviso operativo a los administradores (vencimientos, caídas): va por todos sus canales activos,
+ * sin mirar los eventos elegidos, porque no se puede dejar pasar. Sin la migración 012 (sin roles)
+ * va a todos los usuarios activos.
+ */
+export async function notifyAdmins(event: string, message: { subject: string; text: string }): Promise<number> {
+  try {
+    const supabase = getSupabaseAdmin();
+    let { data, error } = await supabase
+      .from("admin_users")
+      .select("id,notify_channels")
+      .eq("active", true)
+      .eq("role", "admin");
+    if (error && error.code === "42703") {
+      ({ data, error } = await supabase.from("admin_users").select("id,notify_channels").eq("active", true));
+    }
+    if (error) throw error;
+    let sent = 0;
+    await Promise.allSettled(
+      (data ?? []).flatMap((row) => {
+        const channels = parseChannels(row.notify_channels);
+        return activeChannels(channels).map(async (channel) => {
+          try {
+            await send(channel, channels, message);
+            sent += 1;
+            await log({ userId: row.id as string, channel, event, ticketId: null, ok: true });
+          } catch (err) {
+            await log({ userId: row.id as string, channel, event, ticketId: null, ok: false, error: (err as Error).message });
+          }
+        });
+      })
+    );
+    return sent;
+  } catch (error) {
+    console.error("[notify] avisos a admins", error);
+    return 0;
+  }
+}
+
+/** Aviso a un usuario puntual por sus canales activos (recordatorios de la agenda). */
+export async function notifyUser(userId: string, event: string, message: { subject: string; text: string }): Promise<boolean> {
+  try {
+    const [target] = await recipients({ onlyUserId: userId });
+    if (!target) return false;
+    let sent = false;
+    await Promise.allSettled(
+      activeChannels(target.channels).map(async (channel) => {
+        try {
+          await send(channel, target.channels, message);
+          sent = true;
+          await log({ userId, channel, event, ticketId: null, ok: true });
+        } catch (err) {
+          await log({ userId, channel, event, ticketId: null, ok: false, error: (err as Error).message });
+        }
+      })
+    );
+    return sent;
+  } catch (error) {
+    console.error("[notify] aviso a usuario", error);
+    return false;
   }
 }

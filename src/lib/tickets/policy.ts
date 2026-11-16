@@ -10,6 +10,8 @@ export type TicketUrgency = (typeof TICKET_URGENCIES)[number];
 export const TICKET_STATUSES = [
   "new",
   "analysis",
+  // Esperando al cliente: le pedimos información (migración 013).
+  "waiting",
   "ready",
   "in_progress",
   "testing",
@@ -152,7 +154,7 @@ export function validateTicketInput(
 // un usuario del panel: no aplica la política de tipos del cliente ni el límite por hora, y la
 // descripción admite textos más largos porque suelen ser conversaciones pegadas enteras.
 
-export const MANUAL_SOURCES = ["whatsapp", "email", "llamada", "reunion", "manual"] as const;
+export const MANUAL_SOURCES = ["whatsapp", "email", "llamada", "reunion", "manual", "monitoreo"] as const;
 export type ManualSource = (typeof MANUAL_SOURCES)[number];
 
 export const MANUAL_TEXT_LIMIT = 20000;

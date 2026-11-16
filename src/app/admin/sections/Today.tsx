@@ -22,9 +22,12 @@ import { duration, startTimer, stopTimer, todayLocal, useElapsed, useTimeEntries
 import type { TicketChanges } from "../board/Board";
 import { StatCard } from "./StatCard";
 import { EntryRow, LogTimeModal } from "./TimeWidgets";
+import { daysColor, daysText, KIND_LABEL, type Asset, type UptimeCheck } from "./Infra";
+import { AgendaCard } from "./Agenda";
+import type { Lead } from "./Sales";
 
 // Orden de lo que tengo para hacer: lo que espera que pruebe, después lo que estoy haciendo y lo listo.
-const STATUS_ORDER: Record<string, number> = { testing: 0, in_progress: 1, ready: 2, analysis: 3, new: 4 };
+const STATUS_ORDER: Record<string, number> = { testing: 0, in_progress: 1, ready: 2, analysis: 3, new: 4, waiting: 5 };
 
 /** Preguntas del análisis que todavía no tienen respuesta en las decisiones. */
 export function pendingQuestions(ticket: Ticket): number {
@@ -56,13 +59,15 @@ export function Today({
   clients: Array<{ id: string; name: string }>;
   onOpenTicket: (id: string) => void;
   onPatch: (id: string, changes: TicketChanges) => Promise<void>;
-  go: (section: "tablero" | "horas" | "resumen") => void;
+  go: (section: "tablero" | "horas" | "resumen" | "infraestructura" | "ventas") => void;
 }) {
   const { running, available } = useTimer();
   const elapsed = useElapsed(running?.runningSince);
   const [logOpen, setLogOpen] = useState(false);
   const [overview, setOverview] = useState<OverviewLite | null>(null);
   const finance = me.permissions.includes("finance");
+  const manage = me.permissions.includes("manage");
+  const [infra, setInfra] = useState<{ assets: Asset[]; checks: UptimeCheck[] } | null>(null);
   const week = useTimeEntries(me.id ? `from=${weekStart()}&to=${todayLocal()}&userId=${me.id}` : null);
 
   useEffect(() => {
@@ -71,6 +76,28 @@ export function Today({
       .then((data) => setOverview(data.overview))
       .catch(() => setOverview(null));
   }, [finance]);
+
+  useEffect(() => {
+    if (!manage) return;
+    api<{ assets: Asset[]; checks: UptimeCheck[] }>("/api/admin/infra")
+      .then((data) => setInfra(data))
+      .catch(() => setInfra(null));
+  }, [manage]);
+  const [followUps, setFollowUps] = useState<Lead[]>([]);
+  useEffect(() => {
+    if (!manage) return;
+    api<{ leads: Lead[] }>("/api/admin/sales")
+      .then((data) =>
+        setFollowUps(
+          data.leads
+            .filter((l) => !["won", "lost"].includes(l.stage) && l.next_step_date && l.next_step_date <= todayLocal())
+            .sort((a, b) => (a.next_step_date ?? "").localeCompare(b.next_step_date ?? ""))
+        )
+      )
+      .catch(() => setFollowUps([]));
+  }, [manage]);
+  const expiring = (infra?.assets ?? []).filter((a) => a.days_left !== null && a.days_left <= 30);
+  const downChecks = (infra?.checks ?? []).filter((c) => c.active && c.status === "down");
 
   const open = useMemo(() => tickets.filter((t) => !isClosed(t.status)), [tickets]);
   const mine = useMemo(
@@ -184,6 +211,35 @@ export function Today({
           timer={me.id && available ? running?.ticketId ?? "" : null}
         />
         <Stack gap="md">
+          {me.id && <AgendaCard clients={clients} />}
+          {followUps.length > 0 && (
+            <Paper p="md">
+              <Text fw={600} mb="xs">
+                Seguimientos de ventas
+              </Text>
+              <Stack gap={4}>
+                {followUps.slice(0, 6).map((lead) => (
+                  <Group key={lead.id} justify="space-between" wrap="nowrap">
+                    <Text size="sm" truncate>
+                      {lead.company}
+                      {lead.next_step ? (
+                        <Text span size="xs" c="dimmed">
+                          {" "}
+                          · {lead.next_step}
+                        </Text>
+                      ) : null}
+                    </Text>
+                    <Badge size="xs" color={lead.next_step_date! < todayLocal() ? "red" : "yellow"} variant="light" style={{ flexShrink: 0 }}>
+                      {lead.next_step_date! < todayLocal() ? "Atrasado" : "Hoy"}
+                    </Badge>
+                  </Group>
+                ))}
+              </Stack>
+              <Button variant="subtle" size="xs" mt="xs" px={0} onClick={() => go("ventas")}>
+                Ver ventas
+              </Button>
+            </Paper>
+          )}
           {waiting.length > 0 && (
             <TicketList
               title="Esperan tu respuesta"
@@ -220,6 +276,38 @@ export function Today({
               ) : null
             }
           />
+          {manage && (expiring.length > 0 || downChecks.length > 0) && (
+            <Paper p="md">
+              <Text fw={600} mb="xs">
+                Infraestructura
+              </Text>
+              <Stack gap={6}>
+                {downChecks.map((check) => (
+                  <Group key={check.id} justify="space-between" wrap="nowrap">
+                    <Text size="sm" truncate>
+                      {check.name}
+                      {check.client_name ? ` · ${check.client_name}` : ""}
+                    </Text>
+                    <Badge color="red">Caído</Badge>
+                  </Group>
+                ))}
+                {expiring.slice(0, 5).map((asset) => (
+                  <Group key={asset.id} justify="space-between" wrap="nowrap">
+                    <Text size="sm" truncate>
+                      {KIND_LABEL[asset.kind]} {asset.name}
+                      {asset.client_name ? ` · ${asset.client_name}` : ""}
+                    </Text>
+                    <Badge color={daysColor(asset.days_left, asset.auto_renew)} variant="light" style={{ flexShrink: 0 }}>
+                      {daysText(asset.days_left)}
+                    </Badge>
+                  </Group>
+                ))}
+              </Stack>
+              <Button variant="subtle" size="xs" mt="xs" px={0} onClick={() => go("infraestructura")}>
+                Ver infraestructura
+              </Button>
+            </Paper>
+          )}
           {finance && overview && (
             <Paper p="md">
               <Group justify="space-between" mb={debtors.length ? "xs" : 0}>

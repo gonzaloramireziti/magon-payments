@@ -1,6 +1,6 @@
 import type { Permission, Role } from "@/lib/admin/roles";
 
-export type TicketStatus = "new" | "analysis" | "ready" | "in_progress" | "testing" | "done" | "discarded";
+export type TicketStatus = "new" | "analysis" | "waiting" | "ready" | "in_progress" | "testing" | "done" | "discarded";
 export type TicketUrgency = "low" | "medium" | "high" | "critical";
 export type TicketType = "bug" | "feature";
 
@@ -38,6 +38,8 @@ export type Ticket = {
   // Análisis del agente y respuestas del equipo (migración 009; pueden faltar antes).
   triage?: TriageResult | null;
   decisions?: Decision[];
+  // Proyecto al que pertenece (migración 015).
+  project_id?: string | null;
   // Issue en el repo del cliente donde trabaja Claude Code (migración 010).
   github_issue?: GithubIssueLink | null;
 };
@@ -57,7 +59,19 @@ export type Decision = { questionId: string | null; question: string; answer: st
 
 export type Activity = {
   id: string;
-  kind: "comment" | "status" | "assignee" | "urgency" | "labels" | "created" | "triage" | "decision" | "github";
+  kind:
+    | "comment"
+    | "status"
+    | "assignee"
+    | "urgency"
+    | "labels"
+    | "created"
+    | "triage"
+    | "decision"
+    | "github"
+    // Conversación con el cliente: lo que le escribimos y lo que responde (migración 013).
+    | "to_client"
+    | "client_reply";
   authorName: string | null;
   body: string | null;
   meta: Record<string, unknown>;
@@ -86,6 +100,7 @@ export type PanelUser = {
 export const COLUMNS: Array<{ status: TicketStatus; label: string; color: string }> = [
   { status: "new", label: "Nuevo", color: "blue" },
   { status: "analysis", label: "En análisis", color: "cyan" },
+  { status: "waiting", label: "Esperando al cliente", color: "yellow" },
   { status: "ready", label: "Listo para hacer", color: "grape" },
   { status: "in_progress", label: "En desarrollo", color: "brand" },
   { status: "testing", label: "Para probar", color: "orange" },
@@ -95,6 +110,7 @@ export const COLUMNS: Array<{ status: TicketStatus; label: string; color: string
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   new: "Nuevo",
   analysis: "En análisis",
+  waiting: "Esperando al cliente",
   ready: "Listo para hacer",
   in_progress: "En desarrollo",
   testing: "Para probar",
@@ -105,6 +121,7 @@ export const STATUS_LABEL: Record<TicketStatus, string> = {
 export const STATUS_COLOR: Record<TicketStatus, string> = {
   new: "blue",
   analysis: "cyan",
+  waiting: "yellow",
   ready: "grape",
   in_progress: "brand",
   testing: "orange",

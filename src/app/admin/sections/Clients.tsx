@@ -29,6 +29,7 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import {
+  IconReport,
   IconBrandWhatsapp,
   IconCash,
   IconCheck,
@@ -42,6 +43,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { api, notifyError, notifyOk } from "../lib/api";
+import { ClientReportModal } from "./ClientReport";
 import { money, normalizeText, shortDate } from "../lib/format";
 
 // Tipos de servicio (ver SERVICE_TYPES en lib/billing/config.ts). Por ahora solo cobro recurrente.
@@ -113,6 +115,7 @@ export function Clients({
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Client | "new" | null>(null);
   const [paying, setPaying] = useState<Client | null>(null);
+  const [reporting, setReporting] = useState<Client | null>(null);
 
   useEffect(() => {
     if (initialSearch) {
@@ -194,6 +197,9 @@ export function Clients({
             href={`/api/admin/billing/invoice?clientId=${client.id}`}
           >
             Factura del mes (PDF)
+          </Menu.Item>
+          <Menu.Item leftSection={<IconReport size={14} />} onClick={() => setReporting(client)}>
+            Resumen mensual para el cliente
           </Menu.Item>
           <Menu.Item
             leftSection={<IconBrandWhatsapp size={14} />}
@@ -346,6 +352,7 @@ export function Clients({
           }}
         />
       )}
+      {reporting && <ClientReportModal client={reporting} onClose={() => setReporting(null)} />}
       {paying && (
         <PaymentModal
           client={paying}

@@ -10,7 +10,16 @@ import {
   type ReactNode,
 } from "react";
 import { DEFAULT_THEME, type MagonPayTheme } from "./types";
-import { detectChanges, parseState, rememberSubmitted, storageKey, type StatusChange, type WatchState } from "./supportWatch";
+import {
+  detectChanges,
+  parseState,
+  pendingAnswers,
+  rememberSubmitted,
+  storageKey,
+  type StatusChange,
+  type WatchedTicket,
+  type WatchState,
+} from "./supportWatch";
 
 export type MagonTicketType = "bug" | "feature";
 export type MagonTicketUrgency = "low" | "medium" | "high" | "critical";
@@ -74,6 +83,9 @@ export type MagonSupportLabels = {
   disabled: string;
   updatesTitle: string;
   updatesView: string;
+  pendingTitle: string;
+  pendingText: string;
+  pendingView: string;
   noteDiscarded: string;
   noteDone: string;
   needsReply: string;
@@ -115,6 +127,9 @@ export const DEFAULT_SUPPORT_LABELS: MagonSupportLabels = {
   disabled: "Los reportes no están habilitados para esta cuenta.",
   updatesTitle: "Novedades de tus reportes",
   updatesView: "Ver mis reportes",
+  pendingTitle: "Tenés una pregunta del equipo",
+  pendingText: "Necesitamos tu respuesta para seguir con estos reportes:",
+  pendingView: "Responder",
   noteDiscarded: "Motivo",
   noteDone: "Nota del equipo",
   needsReply: "Necesitamos que nos respondas para seguir con este reporte.",
@@ -159,8 +174,11 @@ export type MagonSupportProps = {
   hideTrigger?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Botón propio. `info.unseen` es la cantidad de reportes que cambiaron de estado y el usuario no vio. */
-  renderTrigger?: (open: () => void, info: { unseen: number }) => ReactNode;
+  /**
+   * Botón propio. `info.unseen` es la cantidad de reportes con novedades sin ver (incluye los que
+   * esperan respuesta); `info.pending`, los que esperan una respuesta del usuario.
+   */
+  renderTrigger?: (open: () => void, info: { unseen: number; pending: number }) => ReactNode;
   onSubmitted?: (ticket: { id: string; number: number }) => void;
   /**
    * Cada cuánto revisa si cambió el estado de los reportes del usuario (ms). Por defecto 60 s;
@@ -266,6 +284,9 @@ export function MagonSupport(props: MagonSupportProps) {
   const [replyError, setReplyError] = useState<{ number: number; message: string } | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [toastVisible, setToastVisible] = useState(false);
+  // Reportes esperando su respuesta: el aviso no se va solo y vuelve en cada carga hasta que responda.
+  const [pending, setPending] = useState<WatchedTicket[]>([]);
+  const [pendingDismissed, setPendingDismissed] = useState("");
 
   // Identidad de quien mira: filtra en el server los reportes que cargó él. Sin identidad,
   // se siguen solo los cargados desde este navegador.
@@ -302,7 +323,11 @@ export function MagonSupport(props: MagonSupportProps) {
       const response = await fetch(ticketsUrl, { cache: "no-store" });
       const data = await response.json();
       if (!response.ok || !data.ok) return;
-      const result = detectChanges(readWatch(), watched(data.tickets as MagonClientTicket[]), !reporterId && !reporterEmail);
+      const tickets = data.tickets as MagonClientTicket[];
+      const onlyMine = !reporterId && !reporterEmail;
+      const state = readWatch();
+      setPending(pendingAnswers(state, tickets, onlyMine));
+      const result = detectChanges(state, watched(tickets), onlyMine);
       writeWatch(result.next);
       if (result.changes.length === 0) return;
       // Afuera, los estados limpios (sin la cuenta de mensajes de `watched`).
@@ -365,6 +390,7 @@ export function MagonSupport(props: MagonSupportProps) {
         const onlyMine = !reporterId && !reporterEmail;
         const state = readWatch();
         setMine(onlyMine ? tickets.filter((t) => state.mine.includes(t.number)) : tickets);
+        setPending(pendingAnswers(state, tickets, onlyMine));
         // Al mirar la lista quedan vistos: se actualiza el último estado conocido.
         writeWatch(detectChanges(state, watched(tickets), onlyMine).next);
       })
@@ -517,7 +543,8 @@ export function MagonSupport(props: MagonSupportProps) {
   };
   const types = config?.types ?? [];
 
-  const unseen = changes.length;
+  const pendingKey = pending.map((p) => p.number).join(",");
+  const unseen = new Set([...changes.map((c) => c.number), ...pending.map((p) => p.number)]).size;
   const openMine = () => {
     setTab("mine");
     setOpen(true);
@@ -548,7 +575,7 @@ export function MagonSupport(props: MagonSupportProps) {
   );
 
   const trigger = renderTrigger ? (
-    renderTrigger(() => (unseen ? openMine() : setOpen(true)), { unseen })
+    renderTrigger(() => (unseen ? openMine() : setOpen(true)), { unseen, pending: pending.length })
   ) : hideTrigger ? null : (
     <button
       type="button"
@@ -571,25 +598,53 @@ export function MagonSupport(props: MagonSupportProps) {
   );
 
   const side = position === "bottom-left" ? "left" : "right";
-  const toast = toastVisible && changes.length > 0 && !isOpen && (
-    <div
-      role="status"
-      style={{
-        position: "fixed",
-        bottom: hideTrigger || renderTrigger ? 20 : 76,
-        [side]: 20,
-        zIndex: 2147483000,
-        width: "min(360px, calc(100vw - 40px))",
-        background: t.surface,
-        color: t.text,
-        border: `1px solid ${t.border}`,
-        borderRadius: t.radius,
-        boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
-        padding: "12px 14px",
-        fontFamily: t.fontFamily,
-        boxSizing: "border-box",
-      }}
-    >
+  const notice: CSSProperties = {
+    position: "fixed",
+    bottom: hideTrigger || renderTrigger ? 20 : 76,
+    [side]: 20,
+    zIndex: 2147483000,
+    width: "min(360px, calc(100vw - 40px))",
+    background: t.surface,
+    color: t.text,
+    border: `1px solid ${t.border}`,
+    borderRadius: t.radius,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+    padding: "12px 14px",
+    fontFamily: t.fontFamily,
+    boxSizing: "border-box",
+  };
+  // Si cierra el aviso, no vuelve a aparecer en esta carga salvo que llegue otra pregunta.
+  const showPending = pending.length > 0 && pendingKey !== pendingDismissed && !isOpen;
+  const pendingNotice = showPending && (
+    <div role="alert" style={{ ...notice, borderLeft: "4px solid #fbbf24" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <strong style={{ fontSize: 14 }}>{l.pendingTitle}</strong>
+        <button
+          type="button"
+          onClick={() => setPendingDismissed(pendingKey)}
+          aria-label={l.close}
+          style={{ background: "transparent", border: "none", color: t.muted, cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+        >
+          ✕
+        </button>
+      </div>
+      <div style={{ fontSize: 13, color: t.muted, marginTop: 6 }}>{l.pendingText}</div>
+      <div style={{ display: "grid", gap: 4, margin: "6px 0 10px" }}>
+        {pending.slice(0, 3).map((item) => (
+          <div key={item.number} style={{ fontSize: 13 }}>
+            #{item.number} {item.title.length > 48 ? `${item.title.slice(0, 48)}…` : item.title}
+          </div>
+        ))}
+        {pending.length > 3 && <div style={{ fontSize: 12, color: t.muted }}>y {pending.length - 3} más</div>}
+      </div>
+      <button type="button" onClick={openMine} style={{ ...primary, padding: "8px 12px", fontSize: 13 }}>
+        {l.pendingView}
+      </button>
+    </div>
+  );
+  // El aviso de la pregunta tiene prioridad: no se apilan dos avisos en el mismo lugar.
+  const toast = toastVisible && changes.length > 0 && !isOpen && !showPending && (
+    <div role="status" style={notice}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
         <strong style={{ fontSize: 14 }}>{l.updatesTitle}</strong>
         <button
@@ -619,6 +674,7 @@ export function MagonSupport(props: MagonSupportProps) {
   return (
     <>
       {trigger}
+      {pendingNotice}
       {toast}
       {isOpen && (
         <div

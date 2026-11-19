@@ -143,6 +143,12 @@ reporte vuelve a análisis. Los mensajes nuevos del equipo avisan igual que un c
 Pasá `reporter` (sobre todo `id` o `email`): sin identidad, solo puede responder desde el navegador
 donde cargó el reporte.
 
+**Aviso de pregunta pendiente (1.6.0):** mientras haya un reporte en «Necesitamos tu respuesta»,
+el botón muestra la marca y aparece un aviso fijo («Tenés una pregunta del equipo») con un botón
+que abre «Mis reportes». No se va solo: si el usuario lo cierra, vuelve en la próxima carga de la
+app o cuando llegue otra pregunta, y desaparece recién cuando responde. Con `renderTrigger`, el
+segundo argumento trae `{ unseen, pending }` para mostrarlo en un menú propio.
+
 | Prop | Tipo | Default | Descripción |
 | --- | --- | --- | --- |
 | `clientKey` | `string` | — | KEY del cliente (obligatoria) |
@@ -152,6 +158,6 @@ donde cargó el reporte.
 | `appVersion` | `string` | — | Versión de la app, para ubicar el problema |
 | `position` | `"bottom-right" \| "bottom-left"` | `"bottom-right"` | Lugar del botón flotante |
 | `hideTrigger` / `open` / `onOpenChange` | — | — | Abrirlo desde un menú propio |
-| `renderTrigger` | `(open) => ReactNode` | — | Botón propio |
+| `renderTrigger` | `(open, { unseen, pending }) => ReactNode` | — | Botón propio |
 | `theme`, `labels` | — | — | Mismo tema que `MagonPayGate`; textos en español |
 | `onSubmitted` | `(ticket) => void` | — | Callback con `{ id, number }` |

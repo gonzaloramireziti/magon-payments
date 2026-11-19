@@ -59,3 +59,12 @@ export function rememberSubmitted(state: WatchState, number: number, status = "n
     mine: [...state.mine.filter((n) => n !== number), number].slice(-50),
   };
 }
+
+/**
+ * Reportes en los que el equipo espera una respuesta del usuario ("waiting"). A diferencia de
+ * `detectChanges`, no depende de lo ya visto: mientras la pregunta siga sin responder, se avisa
+ * en cada carga de la app (aunque el usuario haya cerrado el aviso antes o cambie de navegador).
+ */
+export function pendingAnswers(state: WatchState, tickets: WatchedTicket[], onlyMine: boolean): WatchedTicket[] {
+  return tickets.filter((t) => t.status === "waiting" && (!onlyMine || state.mine.includes(t.number)));
+}
